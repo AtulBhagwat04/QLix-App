@@ -1,0 +1,20 @@
+# Node.js
+server/node_modules/
+server/.env
+
+# Local configuration files
+.env
+.env.local
+.env.*.local
+
+# IDEs and editors
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# System files
+.DS_Store
+Thumbs.db
+*.log
