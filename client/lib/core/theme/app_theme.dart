@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_sizes.dart';
 import '../constants/app_text_styles.dart';
@@ -9,10 +12,19 @@ class AppTheme {
   static const Color secondaryColor = AppColors.secondary;
   static const Color accentColor = AppColors.accent;
 
+  static bool get _isTest {
+    try {
+      return !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+    } catch (_) {
+      return false;
+    }
+  }
+
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: _isTest ? null : GoogleFonts.montserrat().fontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
@@ -90,12 +102,21 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight, letterSpacing: -0.5),
-        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight, letterSpacing: -0.2),
-        bodyLarge: TextStyle(fontSize: 16, color: AppColors.textSecondaryLight),
-        bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryLight),
-      ),
+      textTheme: _isTest
+          ? const TextTheme(
+              headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight, letterSpacing: -0.5),
+              titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight, letterSpacing: -0.2),
+              bodyLarge: TextStyle(fontSize: 16, color: AppColors.textSecondaryLight),
+              bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryLight),
+            )
+          : GoogleFonts.montserratTextTheme(
+              const TextTheme(
+                headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight, letterSpacing: -0.5),
+                titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight, letterSpacing: -0.2),
+                bodyLarge: TextStyle(fontSize: 16, color: AppColors.textSecondaryLight),
+                bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryLight),
+              ),
+            ),
     );
   }
 
@@ -103,6 +124,7 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: _isTest ? null : GoogleFonts.montserrat().fontFamily,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         secondary: AppColors.secondary,
@@ -180,12 +202,21 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryDark, letterSpacing: -0.5),
-        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryDark, letterSpacing: -0.2),
-        bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimaryDark),
-        bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryDark),
-      ),
+      textTheme: _isTest
+          ? const TextTheme(
+              headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryDark, letterSpacing: -0.5),
+              titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryDark, letterSpacing: -0.2),
+              bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimaryDark),
+              bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryDark),
+            )
+          : GoogleFonts.montserratTextTheme(
+              const TextTheme(
+                headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryDark, letterSpacing: -0.5),
+                titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryDark, letterSpacing: -0.2),
+                bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimaryDark),
+                bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryDark),
+              ),
+            ),
     );
   }
 }
