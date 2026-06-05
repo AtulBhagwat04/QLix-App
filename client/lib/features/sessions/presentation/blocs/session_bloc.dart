@@ -43,6 +43,15 @@ class JoinSessionRequested extends SessionEvent {
   List<Object?> get props => [accessCode, deviceId, name, isAnonymous];
 }
 
+class VerifySessionCodeRequested extends SessionEvent {
+  final String accessCode;
+
+  const VerifySessionCodeRequested({required this.accessCode});
+
+  @override
+  List<Object?> get props => [accessCode];
+}
+
 class UpdateSessionRequested extends SessionEvent {
   final String sessionId;
   final Map<String, dynamic> body;
@@ -92,6 +101,16 @@ class SessionJoinSuccess extends SessionState {
   @override
   List<Object?> get props => [session, participant];
 }
+
+class SessionVerifySuccess extends SessionState {
+  final Map<String, dynamic> session;
+
+  const SessionVerifySuccess(this.session);
+
+  @override
+  List<Object?> get props => [session];
+}
+
 class SessionFailure extends SessionState {
   final String message;
   const SessionFailure(this.message);
@@ -107,6 +126,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     on<LoadSessions>(_onLoadSessions);
     on<CreateSessionRequested>(_onCreateSessionRequested);
     on<JoinSessionRequested>(_onJoinSessionRequested);
+    on<VerifySessionCodeRequested>(_onVerifySessionCodeRequested);
     on<UpdateSessionRequested>(_onUpdateSessionRequested);
     on<DeleteSessionRequested>(_onDeleteSessionRequested);
   }
@@ -147,6 +167,16 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       final session = Map<String, dynamic>.from(data['session'] as Map);
       final participant = Map<String, dynamic>.from(data['participant'] as Map);
       emit(SessionJoinSuccess(session, participant));
+    } catch (e) {
+      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+    }
+  }
+
+  Future<void> _onVerifySessionCodeRequested(VerifySessionCodeRequested event, Emitter<SessionState> emit) async {
+    emit(SessionLoading());
+    try {
+      final session = await sessionRepository.verifySessionCode(event.accessCode);
+      emit(SessionVerifySuccess(session));
     } catch (e) {
       emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
     }

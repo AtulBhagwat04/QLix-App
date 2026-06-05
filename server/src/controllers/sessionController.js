@@ -197,3 +197,30 @@ export const deleteSession = async (req, res, next) => {
     next(error);
   }
 };
+
+export const verifySessionCode = async (req, res, next) => {
+  const { accessCode } = req.params;
+
+  try {
+    const result = await db.query(
+      'SELECT * FROM sessions WHERE access_code = $1',
+      [accessCode]
+    );
+
+    if (result.rows.length === 0) {
+      return next(new AppError('Active session not found with this code', 404));
+    }
+
+    const session = result.rows[0];
+    if (session.state === 'ended') {
+      return next(new AppError('This session has already ended', 400));
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: session,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
