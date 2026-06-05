@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_sizes.dart';
 
 class HostSplashWidget extends StatefulWidget {
   const HostSplashWidget({super.key});
@@ -39,24 +40,18 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
       duration: const Duration(milliseconds: 4000),
     )..repeat();
 
-    // During development, we do not redirect so we can inspect and build the splash screen
-    _loadingController.forward();
+    // Trigger redirection when progress animation completes
+    _loadingController.forward().then((_) {
+      _handleRedirection();
+    });
   }
 
   Future<void> _handleRedirection() async {
     if (!mounted) return;
 
-    // Check if token exists to redirect host or participant
-    final secureStorage = sl<SecureStorageService>();
-    final token = await secureStorage.getAccessToken();
-    final isLoggedIn = token != null;
-
+    // Temporarily force onboarding redirection for design/preview phase
     if (mounted) {
-      if (isLoggedIn) {
-        context.go('/dashboard');
-      } else {
-        context.go('/');
-      }
+      context.go('/onboarding');
     }
   }
 
@@ -74,18 +69,27 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
     return Scaffold(
       body: Stack(
         children: [
-          // 1. Cosmic Gradient Background
+          // 1. Light Gradient Background
           Container(
             width: size.width,
             height: size.height,
-            decoration: const BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.0, -0.2),
-                radius: 1.3,
-                colors: [
-                  Color(0xFFFFFFFF), // Pure White
-                  Color(0xFFE2E8F0), // Clean light ice tint
-                ],
+            color: const Color(0xFFF8F9FD),
+          ),
+          // Decorative soft background glow behind the logo
+          Positioned(
+            top: size.height * 0.25,
+            left: size.width * 0.1,
+            right: size.width * 0.1,
+            height: size.height * 0.4,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF6366F1).withOpacity(0.08),
+                    const Color(0xFF6366F1).withOpacity(0.0),
+                  ],
+                ),
               ),
             ),
           ),
@@ -122,7 +126,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                       offset: offset1,
                       child: const _FloatingBubble(
                         icon: Icons.insert_chart_rounded,
-                        bubbleColor: Color(0xFF7C3AED), // Rich Violet
+                        bubbleColor: Color(0xFF8B5CF6),
                         tailOnLeft: true,
                       ),
                     ),
@@ -135,7 +139,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                       offset: offset2,
                       child: const _FloatingBubble(
                         icon: Icons.help_outline_rounded,
-                        bubbleColor: Color(0xFF2563EB), // Rich Blue
+                        bubbleColor: Color(0xFF3B82F6),
                         tailOnLeft: true,
                       ),
                     ),
@@ -148,7 +152,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                       offset: offset3,
                       child: const _FloatingBubble(
                         icon: Icons.favorite_rounded,
-                        bubbleColor: Color(0xFFDB2777), // Rich Pink
+                        bubbleColor: Color(0xFFEC4899),
                         tailOnLeft: true,
                       ),
                     ),
@@ -161,7 +165,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                       offset: offset4,
                       child: const _FloatingBubble(
                         icon: Icons.thumb_up_rounded,
-                        bubbleColor: Color(0xFFEA580C), // Rich Orange
+                        bubbleColor: Color(0xFFF59E0B),
                         tailOnLeft: false,
                       ),
                     ),
@@ -196,7 +200,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                 ),
                 const SizedBox(height: 36),
 
-                // QLix text (Q in white, Lix with brand gradient)
+                // QLix text (Q in slate-black, Lix with brand gradient)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -205,7 +209,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                       style: TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.w900,
-                        color: AppColors.textPrimaryLight,
+                        color: Color(0xFF0F172A),
                         letterSpacing: -1.5,
                       ),
                     ),
@@ -233,7 +237,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondaryLight,
+                      color: Color(0xFF475569),
                       letterSpacing: 0.2,
                     ),
                     children: [
@@ -264,7 +268,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                   width: 170,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.08),
+                    color: const Color(0xFFE2E8F0),
                     borderRadius: BorderRadius.circular(3),
                   ),
                   alignment: Alignment.centerLeft,
@@ -281,7 +285,7 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF06B6D4).withOpacity(0.3),
+                              color: const Color(0xFF06B6D4).withOpacity(0.25),
                               blurRadius: 6,
                               spreadRadius: 1,
                             ),
@@ -292,10 +296,10 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text(
+                const Text(
                   'Loading amazing experiences...',
                   style: TextStyle(
-                    color: AppColors.textSecondaryLight.withOpacity(0.7),
+                    color: Color(0xFF94A3B8),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -319,16 +323,8 @@ class _StarsPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint();
+    final paint = Paint()..color = const Color(0xFF6366F1);
     final rand = math.Random(101); // Seeded random to keep stars static
-
-    // Pastel/colored stars for light background
-    final colors = [
-      const Color(0xFF6366F1), // AppColors.primary
-      const Color(0xFF06B6D4), // AppColors.secondary
-      const Color(0xFF8B5CF6), // AppColors.purpleAccent
-      const Color(0xFFF43F5E), // AppColors.accent
-    ];
 
     for (int i = 0; i < 70; i++) {
       final x = rand.nextDouble() * size.width;
@@ -338,13 +334,12 @@ class _StarsPainter extends CustomPainter {
       // Twinkle individual star based on loop value and its index phase
       final phase = rand.nextDouble() * 2 * math.pi;
       final twinkleOpacity =
-          (math.sin(pulse * 2 * math.pi + phase) * 0.22 + 0.38).clamp(
-            0.10,
-            0.60,
-          );
+          ((math.sin(pulse * 2 * math.pi + phase) * 0.04 + 0.05).clamp(
+            0.01,
+            0.12,
+          ));
 
-      final colorIndex = rand.nextInt(colors.length);
-      paint.color = colors[colorIndex].withOpacity(twinkleOpacity);
+      paint.color = const Color(0xFF6366F1).withOpacity(twinkleOpacity);
       canvas.drawCircle(Offset(x, y), radius, paint);
     }
   }
@@ -372,43 +367,44 @@ class _FloatingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        children: [
-          // Glass background sheet with border
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _SpeechBubbleBorderPainter(
-                color: bubbleColor,
-                tailOnLeft: tailOnLeft,
-              ),
-              child: ClipPath(
-                clipper: _SpeechBubbleClipper(tailOnLeft: tailOnLeft),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
-                  child: Container(
-                    color: Colors.white.withOpacity(0.80),
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: CustomPaint(
+        painter: _SpeechBubbleBorderPainter(
+          color: bubbleColor.withOpacity(0.4),
+          tailOnLeft: tailOnLeft,
+        ),
+        child: ClipPath(
+          clipper: _SpeechBubbleClipper(tailOnLeft: tailOnLeft),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+            child: Container(
+              width: 48,
+              height: 48,
+              color: Colors.white.withOpacity(0.85),
+              child: Center(
+                child: Container(
+                  margin: const EdgeInsets.only(
+                    bottom: 5,
+                  ), // Account for tail height
+                  child: Icon(
+                    icon,
+                    size: 22,
+                    color: bubbleColor,
                   ),
                 ),
               ),
             ),
           ),
-          // Sharp, unclipped Icon overlay on top
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(
-                bottom: 5,
-              ), // Account for tail height
-              child: Icon(
-                icon,
-                size: 22,
-                color: bubbleColor,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -469,28 +465,22 @@ class _SpeechBubbleBorderPainter extends CustomPainter {
     final clipper = _SpeechBubbleClipper(tailOnLeft: tailOnLeft);
     final path = clipper.getClip(size);
 
-    // Draw a subtle shadow to make the bubble pop on light background
-    canvas.drawShadow(
-      path,
-      Colors.black.withOpacity(0.12),
-      3.0,
-      false,
-    );
-
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
+      ..strokeWidth = 2.0
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [color.withOpacity(0.7), color.withOpacity(0.2)],
+        colors: [color.withOpacity(0.95), color.withOpacity(0.3)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _SpeechBubbleBorderPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.tailOnLeft != tailOnLeft;
+  }
 }
 
 // -------------------------------------------------------------
@@ -507,13 +497,13 @@ class _LogoPainter extends CustomPainter {
     final h = size.height;
 
     // 1. Draw outer glowing drop shadow (opacity pulses softly)
-    final shadowOpacity = (0.28 + 0.14 * math.sin(pulse * 2 * math.pi)).clamp(
-      0.1,
-      0.5,
+    final shadowOpacity = (0.12 + 0.05 * math.sin(pulse * 2 * math.pi)).clamp(
+      0.05,
+      0.22,
     );
     final shadowPaint = Paint()
       ..color = const Color(0xFF6366F1).withOpacity(shadowOpacity)
-      ..imageFilter = ImageFilter.blur(sigmaX: 18, sigmaY: 18);
+      ..imageFilter = ImageFilter.blur(sigmaX: 12, sigmaY: 12);
 
     final outerD = Path()
       ..moveTo(w * 0.22, h * 0.15)

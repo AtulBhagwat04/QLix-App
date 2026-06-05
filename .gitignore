@@ -1,20 +1,98 @@
-# Node.js
-server/node_modules/
-server/.env
+# ====================================================================
+# QLix Root Gitignore
+# ====================================================================
 
-# Local configuration files
-.env
-.env.local
-.env.*.local
+# -------------------------------------------------------------
+# OS & Generic Files
+# -------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.log
+*.class
+*.pyc
+*.swp
+.history
 
-# IDEs and editors
+# -------------------------------------------------------------
+# IDEs & Editor Configurations
+# -------------------------------------------------------------
 .idea/
 .vscode/
 *.iml
 *.ipr
 *.iws
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
 
-# System files
-.DS_Store
-Thumbs.db
-*.log
+# -------------------------------------------------------------
+# Node.js / Server-side Development
+# -------------------------------------------------------------
+node_modules/
+**/node_modules/
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.eslintcache
+.parcel-cache
+.cache/
+dist/
+out/
+
+# -------------------------------------------------------------
+# Flutter & Dart Client-side
+# -------------------------------------------------------------
+.dart_tool/
+**/doc/api/
+.pub-cache/
+.pub/
+build/
+**/build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+app.*.symbols
+app.*.map.json
+
+# Android specifics
+**/android/local.properties
+**/android/key.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/.gradle/
+**/android/app/src/main/assets/
+
+# iOS specifics
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/Flutter.podspec
+**/ios/.symlinks/
+**/ios/Pods/
+**/ios/Podfile.lock
+
+# macOS specifics
+**/macos/Flutter/ephemeral/
+
+# Windows specifics
+**/windows/flutter/ephemeral/
+
+# Linux specifics
+**/linux/flutter/ephemeral/
