@@ -31,7 +31,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
     // Do not pre-fill name; prompt the user to enter it explicitly.
   }
 
-  @override
+  @overriderem
   void dispose() {
     _codeController.dispose();
     _codeFocusNode.dispose();
@@ -55,13 +55,13 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
       },
       transitionBuilder: (context, anim1, anim2, child) {
         // Smooth scale-up and fade-in transition
-        final curve = CurvedAnimation(parent: anim1, curve: Curves.easeOutCubic);
+        final curve = CurvedAnimation(
+          parent: anim1,
+          curve: Curves.easeOutCubic,
+        );
         return ScaleTransition(
           scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),
-          child: FadeTransition(
-            opacity: anim1,
-            child: child,
-          ),
+          child: FadeTransition(opacity: anim1, child: child),
         );
       },
     );
@@ -206,13 +206,13 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: AppSizes.space24,
+                  horizontal: AppSizes.space20,
                   vertical: 16,
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Top Card Illustration
                     _buildTopIllustration()
@@ -222,13 +222,13 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                           begin: const Offset(0.8, 0.8),
                           curve: Curves.easeOutBack,
                         ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
 
                     // Title
                     const Text(
                           'Join a Session',
                           style: TextStyle(
-                            fontSize: 26,
+                            fontSize: 24,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimaryLight,
                             letterSpacing: -0.5,
@@ -237,7 +237,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                         .animate()
                         .fadeIn(duration: 400.ms)
                         .slideY(begin: 0.1, end: 0),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
 
                     // Subtitle description
                     const Padding(
@@ -256,7 +256,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                         .animate()
                         .fadeIn(delay: 100.ms, duration: 400.ms)
                         .slideY(begin: 0.1, end: 0),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Card Form Panel
                     Card(
@@ -274,7 +274,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 20.0,
-                          vertical: 24.0,
+                          vertical: 20.0,
                         ),
                         child: Form(
                           key: _formKey,
@@ -285,15 +285,16 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                               const Text(
                                     'Session Code',
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
                                       color: Color(0xFF64748B),
+                                      letterSpacing: 0.2,
                                     ),
                                   )
                                   .animate()
                                   .fadeIn(delay: 100.ms, duration: 300.ms)
                                   .slideX(begin: -0.05, end: 0),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 6),
 
                               // Premium Custom PIN Input Field
                               _PinCodeField(
@@ -335,7 +336,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                           .fadeIn(duration: 150.ms)
                                           .slideY(begin: -0.2, end: 0),
                                 ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 18),
 
                               // Main Join Session button
                               BlocBuilder<SessionBloc, SessionState>(
@@ -351,7 +352,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                       return _AnimatedScaleButton(
                                         onPressed: _joinSession,
                                         child: Container(
-                                          height: 52,
+                                          height: 48,
                                           decoration: BoxDecoration(
                                             borderRadius: BorderRadius.circular(
                                               12,
@@ -372,7 +373,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                           child: const Text(
                                             'Join Session',
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.bold,
                                               color: Colors.white,
                                               letterSpacing: 0.5,
@@ -385,7 +386,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                   .animate()
                                   .fadeIn(delay: 200.ms, duration: 400.ms)
                                   .slideY(begin: 0.1, end: 0),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 12),
 
                               // OR Divider
                               Row(
@@ -421,7 +422,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                 delay: 250.ms,
                                 duration: 400.ms,
                               ),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: 12),
 
                               // Scan QR Code Option inside Card
                               _AnimatedScaleButton(
@@ -429,7 +430,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 16,
-                                        vertical: 12,
+                                        vertical: 10,
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFEEF2FF),
@@ -464,7 +465,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                                           const Text(
                                             'Scan QR Code',
                                             style: TextStyle(
-                                              fontSize: 14,
+                                              fontSize: 13.5,
                                               fontWeight: FontWeight.w700,
                                               color: AppColors.primary,
                                             ),
@@ -481,7 +482,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Bottom Host Link Option
                     Column(
@@ -508,7 +509,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                         ),
                       ],
                     ).animate().fadeIn(delay: 350.ms, duration: 400.ms),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
@@ -893,9 +894,7 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
             ),
           ),
           // 2. High fidelity HUD scanner overlay (covers full screen)
-          Positioned.fill(
-            child: _ScannerOverlay(controller: _controller),
-          ),
+          Positioned.fill(child: _ScannerOverlay(controller: _controller)),
           // 3. Floating glassmorphic top header bar
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
@@ -906,7 +905,10 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(16),
@@ -918,7 +920,9 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SizedBox(width: 36), // Spacer to balance close button
+                      const SizedBox(
+                        width: 36,
+                      ), // Spacer to balance close button
                       const Text(
                         'Scan QR Code',
                         style: TextStyle(
@@ -960,10 +964,7 @@ class _ScannerCutoutPainter extends CustomPainter {
   final double cutoutSize;
   final double pulse;
 
-  _ScannerCutoutPainter({
-    required this.cutoutSize,
-    required this.pulse,
-  });
+  _ScannerCutoutPainter({required this.cutoutSize, required this.pulse});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -978,12 +979,15 @@ class _ScannerCutoutPainter extends CustomPainter {
 
     final r = AppSizes.radiusCard;
     final cutoutRect = Rect.fromLTWH(left, top, cutoutSize, cutoutSize);
-    final cutoutPath = Path()..addRRect(
-      RRect.fromRectAndRadius(cutoutRect, Radius.circular(r)),
-    );
+    final cutoutPath = Path()
+      ..addRRect(RRect.fromRectAndRadius(cutoutRect, Radius.circular(r)));
 
     // Subtract the cutout path from outer path
-    final maskPath = Path.combine(PathOperation.difference, outerPath, cutoutPath);
+    final maskPath = Path.combine(
+      PathOperation.difference,
+      outerPath,
+      cutoutPath,
+    );
     final maskPaint = Paint()..color = Colors.black.withValues(alpha: 0.65);
     canvas.drawPath(maskPath, maskPaint);
 
@@ -1000,7 +1004,9 @@ class _ScannerCutoutPainter extends CustomPainter {
     // 3. Draw heavy glowing corner brackets
     final double cornerLen = 22.0;
     final double thickness = 3.5;
-    final cornerColor = AppColors.secondary.withValues(alpha: 0.6 + (pulse * 0.4));
+    final cornerColor = AppColors.secondary.withValues(
+      alpha: 0.6 + (pulse * 0.4),
+    );
 
     final cornerPaint = Paint()
       ..color = cornerColor
@@ -1020,28 +1026,44 @@ class _ScannerCutoutPainter extends CustomPainter {
     final tlPath = Path()
       ..moveTo(left + r + cornerLen, top)
       ..lineTo(left + r, top)
-      ..arcToPoint(Offset(left, top + r), radius: Radius.circular(r), clockwise: false)
+      ..arcToPoint(
+        Offset(left, top + r),
+        radius: Radius.circular(r),
+        clockwise: false,
+      )
       ..lineTo(left, top + r + cornerLen);
 
     // Top-Right Corner
     final trPath = Path()
       ..moveTo(right - r - cornerLen, top)
       ..lineTo(right - r, top)
-      ..arcToPoint(Offset(right, top + r), radius: Radius.circular(r), clockwise: true)
+      ..arcToPoint(
+        Offset(right, top + r),
+        radius: Radius.circular(r),
+        clockwise: true,
+      )
       ..lineTo(right, top + r + cornerLen);
 
     // Bottom-Left Corner
     final blPath = Path()
       ..moveTo(left + r + cornerLen, bottom)
       ..lineTo(left + r, bottom)
-      ..arcToPoint(Offset(left, bottom - r), radius: Radius.circular(r), clockwise: true)
+      ..arcToPoint(
+        Offset(left, bottom - r),
+        radius: Radius.circular(r),
+        clockwise: true,
+      )
       ..lineTo(left, bottom - r - cornerLen);
 
     // Bottom-Right Corner
     final brPath = Path()
       ..moveTo(right - r - cornerLen, bottom)
       ..lineTo(right - r, bottom)
-      ..arcToPoint(Offset(right, bottom - r), radius: Radius.circular(r), clockwise: false)
+      ..arcToPoint(
+        Offset(right, bottom - r),
+        radius: Radius.circular(r),
+        clockwise: false,
+      )
       ..lineTo(right, bottom - r - cornerLen);
 
     // Draw Glows first, then sharp corners
@@ -1116,7 +1138,8 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
               child: AnimatedBuilder(
                 animation: _controller,
                 builder: (context, child) {
-                  final pulse = (math.sin(_controller.value * math.pi * 2) + 1) / 2;
+                  final pulse =
+                      (math.sin(_controller.value * math.pi * 2) + 1) / 2;
                   return CustomPaint(
                     painter: _ScannerCutoutPainter(
                       cutoutSize: cutoutSize,
@@ -1134,7 +1157,10 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(20),
@@ -1147,13 +1173,13 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.success,
-                          shape: BoxShape.circle,
-                        ),
-                      )
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                          )
                           .animate(onPlay: (c) => c.repeat(reverse: true))
                           .scale(
                             begin: const Offset(0.8, 0.8),
@@ -1184,7 +1210,8 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                 final double r = AppSizes.radiusCard;
                 final double startY = top + r;
                 final double endY = top + cutoutSize - r;
-                final currentY = startY + (_laserAnimation.value * (endY - startY));
+                final currentY =
+                    startY + (_laserAnimation.value * (endY - startY));
 
                 return Positioned(
                   top: currentY,
@@ -1245,15 +1272,19 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                             boxShadow: isTorchOn
                                 ? [
                                     BoxShadow(
-                                      color: Colors.amber.withValues(alpha: 0.3),
+                                      color: Colors.amber.withValues(
+                                        alpha: 0.3,
+                                      ),
                                       blurRadius: 10,
                                       spreadRadius: 2,
-                                    )
+                                    ),
                                   ]
                                 : null,
                           ),
                           child: Icon(
-                            isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                            isTorchOn
+                                ? Icons.flash_on_rounded
+                                : Icons.flash_off_rounded,
                             color: isTorchOn ? Colors.amber : Colors.white70,
                             size: 22,
                           ),
@@ -1293,7 +1324,10 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
               left: 24,
               right: 24,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(12),
