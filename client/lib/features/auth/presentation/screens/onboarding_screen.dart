@@ -52,7 +52,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ), // Clean off-white/light blue background
       body: Stack(
         children: [
-          // 1. Soft Circular Gradient behind illustrations (Brand Purple tint)
+          // 1. Soft Circular Gradient behind illustrations
           Positioned(
             top: size.height * 0.15,
             left: size.width * 0.1,

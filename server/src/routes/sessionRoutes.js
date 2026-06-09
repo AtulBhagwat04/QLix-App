@@ -6,7 +6,8 @@ import {
   getSessionDetails, 
   joinSessionByCode, 
   updateSession, 
-  deleteSession 
+  deleteSession,
+  verifySessionCode
 } from '../controllers/sessionController.js';
 import { protectHost } from '../middlewares/auth.js';
 import { validateBody } from '../middlewares/validation.js';
@@ -44,6 +45,7 @@ router.delete('/:id', protectHost, deleteSession);
 
 // Public / Participant routes
 router.post('/join', validateBody(joinSessionSchema), joinSessionByCode);
+router.get('/verify/:accessCode', verifySessionCode);
 router.get('/:id', getSessionDetails);
 
 export default router;

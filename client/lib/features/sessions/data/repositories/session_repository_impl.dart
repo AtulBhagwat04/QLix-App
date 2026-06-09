@@ -79,4 +79,13 @@ class SessionRepositoryImpl implements SessionRepository {
     }
     throw Exception(response.data?['message'] ?? 'Failed to join session');
   }
+
+  @override
+  Future<Map<String, dynamic>> verifySessionCode(String accessCode) async {
+    final response = await _apiClient.dio.get('/sessions/verify/$accessCode');
+    if (response.statusCode == 200 && response.data != null) {
+      return Map<String, dynamic>.from(response.data['data'] as Map);
+    }
+    throw Exception(response.data?['message'] ?? 'Failed to verify session code');
+  }
 }

@@ -5,4 +5,5 @@ abstract class SessionRepository {
   Future<Map<String, dynamic>> updateSession(String sessionId, Map<String, dynamic> body);
   Future<void> deleteSession(String sessionId);
   Future<Map<String, dynamic>> joinSessionByCode(String accessCode, String deviceId, String? name, bool isAnonymous);
+  Future<Map<String, dynamic>> verifySessionCode(String accessCode);
 }
