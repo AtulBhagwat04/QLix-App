@@ -31,7 +31,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
     // Do not pre-fill name; prompt the user to enter it explicitly.
   }
 
-  @overriderem
+  @override
   void dispose() {
     _codeController.dispose();
     _codeFocusNode.dispose();
