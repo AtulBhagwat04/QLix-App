@@ -8,10 +8,8 @@ import 'features/sessions/presentation/blocs/session_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   // Initialize dependency injection composition root
   await initDI();
-
   runApp(const MyApp());
 }
 
