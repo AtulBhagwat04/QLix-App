@@ -28,7 +28,6 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
   @override
   void initState() {
     super.initState();
-    // Do not pre-fill name; prompt the user to enter it explicitly.
   }
 
   @override
