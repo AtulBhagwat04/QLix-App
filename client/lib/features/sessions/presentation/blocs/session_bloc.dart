@@ -82,9 +82,10 @@ class SessionInitial extends SessionState {}
 class SessionLoading extends SessionState {}
 class SessionsLoaded extends SessionState {
   final List<Map<String, dynamic>> sessions;
-  const SessionsLoaded(this.sessions);
+  final Map<String, dynamic>? stats;
+  const SessionsLoaded(this.sessions, {this.stats});
   @override
-  List<Object?> get props => [sessions];
+  List<Object?> get props => [sessions, stats];
 }
 class SessionCreateSuccess extends SessionState {
   final Map<String, dynamic> session;
@@ -135,7 +136,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     emit(SessionLoading());
     try {
       final list = await sessionRepository.getSessions();
-      emit(SessionsLoaded(list));
+      Map<String, dynamic>? stats;
+      try {
+        stats = await sessionRepository.getOverviewStats();
+      } catch (_) {
+        // Ignore failure, fallback to null
+      }
+      emit(SessionsLoaded(list, stats: stats));
     } catch (e) {
       emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
     }

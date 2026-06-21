@@ -88,4 +88,13 @@ class SessionRepositoryImpl implements SessionRepository {
     }
     throw Exception(response.data?['message'] ?? 'Failed to verify session code');
   }
+
+  @override
+  Future<Map<String, dynamic>> getOverviewStats() async {
+    final response = await _apiClient.dio.get('/analytics/overview');
+    if (response.statusCode == 200 && response.data != null) {
+      return Map<String, dynamic>.from(response.data['data'] as Map);
+    }
+    throw Exception(response.data?['message'] ?? 'Failed to load overview stats');
+  }
 }

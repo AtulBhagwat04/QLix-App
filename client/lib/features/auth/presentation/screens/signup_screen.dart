@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -33,8 +32,6 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: Colors.white,
       body: Stack(
@@ -73,7 +70,7 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
                   const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
-                          'Create an account to host amazing sessions and engage your audience.',
+                          'Create an account to host and join live sessions.',
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -384,150 +381,6 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // OR Divider
-                  Row(
-                    children: const [
-                      Expanded(
-                        child: Divider(
-                          color: Color(0xFFE2E8F0),
-                          thickness: 1.0,
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'OR',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF94A3B8),
-                            letterSpacing: 0.5,
-          ),
-        ),
-      ),
-                      Expanded(
-                        child: Divider(
-                          color: Color(0xFFE2E8F0),
-                          thickness: 1.0,
-                        ),
-                      ),
-                    ],
-                  )
-                  .animate()
-                  .fadeIn(delay: 220.ms, duration: 300.ms),
-                  const SizedBox(height: 20),
-
-                  // Social Logins
-                  Column(
-                    children: [
-                      // Google Login
-                      _AnimatedScaleButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                  'Google Registration is under development.'),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                              width: 1.0,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Image.network(
-                                'https://www.gstatic.com/images/branding/product/1x/gcheck_24dp.png',
-                                height: 18,
-                                width: 18,
-                                errorBuilder: (context, error, stackTrace) => const Text(
-                                  'G',
-                                  style: TextStyle(
-                                    color: Colors.blue,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Text(
-                                'Continue with Google',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Apple Login
-                      _AnimatedScaleButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text(
-                                  'Apple Registration is under development.'),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                              width: 1.0,
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(
-                                Icons.apple_rounded,
-                                color: Colors.black,
-                                size: 20,
-                              ),
-                              SizedBox(width: 10),
-                              Text(
-                                'Continue with Apple',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                  .animate()
-                  .fadeIn(delay: 240.ms, duration: 400.ms),
-                  const SizedBox(height: 24),
-
                   // Bottom switch link
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -561,33 +414,6 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
             ),
           ),
 
-          // Settings float button (Top Right)
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            right: 16,
-            child: _AnimatedScaleButton(
-              onPressed: () => showNetworkSettingsDialog(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.settings_outlined,
-                  color: Color(0xFF64748B),
-                  size: 20,
-                ),
-              ),
-            ),
-          ).animate().fadeIn(duration: 400.ms),
         ],
       ),
     );
@@ -713,9 +539,9 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
                 ],
               ),
               child: const Icon(
-                Icons.bar_chart_rounded,
+                Icons.person,
                 color: Colors.white,
-                size: 40,
+                size: 44,
               ),
             ),
           )
@@ -793,31 +619,6 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
   }
 }
 
-// Subtle light mode decorative background painter
-class _BackgroundDotsPainter extends CustomPainter {
-  final int seed;
-
-  _BackgroundDotsPainter({required this.seed});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    final rand = math.Random(seed);
-
-    for (int i = 0; i < 20; i++) {
-      final x = rand.nextDouble() * size.width;
-      final y = rand.nextDouble() * size.height;
-      final radius = rand.nextDouble() * 2.0 + 0.5;
-      final opacity = rand.nextDouble() * 0.08 + 0.02;
-
-      paint.color = const Color(0xFF6366F1).withValues(alpha: opacity);
-      canvas.drawCircle(Offset(x, y), radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
 
 // Press scaling helper button
 class _AnimatedScaleButton extends StatefulWidget {

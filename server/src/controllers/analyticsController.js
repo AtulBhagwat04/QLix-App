@@ -63,6 +63,57 @@ export const getSessionAnalytics = async (req, res, next) => {
       count: parseInt(row.count, 10),
     }));
 
+    // 6. Recent Responses
+    const recentRes = await db.query(
+      `SELECT 
+        v.id, 
+        v.created_at as created_at, 
+        pt.name as participant_name,
+        pt.is_anonymous as participant_is_anonymous,
+        pl.title as poll_title, 
+        pl.type as poll_type,
+        opt.option_text, 
+        v.rating_value, 
+        v.text_response,
+        v.rank_value
+       FROM votes v
+       JOIN participants pt ON v.participant_id = pt.id
+       JOIN polls pl ON v.poll_id = pl.id
+       LEFT JOIN poll_options opt ON v.option_id = opt.id
+       WHERE pl.session_id = $1
+       ORDER BY v.created_at DESC
+       LIMIT 5`,
+      [sessionId]
+    );
+
+    const recentResponses = recentRes.rows.map(row => ({
+      id: row.id,
+      createdAt: row.created_at,
+      participantName: row.participant_is_anonymous ? 'Anonymous' : row.participant_name,
+      pollTitle: row.poll_title,
+      pollType: row.poll_type,
+      optionText: row.option_text,
+      ratingValue: row.rating_value,
+      textResponse: row.text_response,
+      rankValue: row.rank_value
+    }));
+
+    // 7. Participants List
+    const partListRes = await db.query(
+      `SELECT id, name, is_anonymous, joined_at
+       FROM participants
+       WHERE session_id = $1
+       ORDER BY joined_at DESC`,
+      [sessionId]
+    );
+
+    const participantsList = partListRes.rows.map(row => ({
+      id: row.id,
+      name: row.is_anonymous ? 'Anonymous' : row.name,
+      isAnonymous: row.is_anonymous,
+      joinedAt: row.joined_at,
+    }));
+
     res.status(200).json({
       status: 'success',
       data: {
@@ -75,6 +126,8 @@ export const getSessionAnalytics = async (req, res, next) => {
         },
         pollStats,
         activityTimeline,
+        recentResponses,
+        participantsList,
       },
     });
   } catch (error) {
@@ -141,3 +194,62 @@ export const exportVotesCSV = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getOverviewAnalytics = async (req, res, next) => {
+  const hostId = req.user.id;
+
+  try {
+    // 1. Total Sessions count
+    const sessionsRes = await db.query(
+      'SELECT COUNT(*) FROM sessions WHERE host_id = $1',
+      [hostId]
+    );
+    const totalSessions = parseInt(sessionsRes.rows[0].count, 10);
+
+    // 2. Total Participants joined across all host's sessions
+    const participantsRes = await db.query(
+      `SELECT COUNT(p.id) 
+       FROM participants p 
+       JOIN sessions s ON p.session_id = s.id 
+       WHERE s.host_id = $1`,
+      [hostId]
+    );
+    const totalParticipants = parseInt(participantsRes.rows[0].count, 10);
+
+    // 3. Total Votes (responses) cast across all host's sessions
+    const votesRes = await db.query(
+      `SELECT COUNT(v.id) 
+       FROM votes v 
+       JOIN polls p ON v.poll_id = p.id 
+       JOIN sessions s ON p.session_id = s.id 
+       WHERE s.host_id = $1`,
+      [hostId]
+    );
+    const totalResponses = parseInt(votesRes.rows[0].count, 10);
+
+    // 4. Total Quizzes created by host
+    // (a poll is a quiz question if at least one option has is_correct = true)
+    const quizzesRes = await db.query(
+      `SELECT COUNT(DISTINCT p.id) 
+       FROM polls p 
+       JOIN poll_options po ON p.id = po.poll_id 
+       JOIN sessions s ON p.session_id = s.id 
+       WHERE s.host_id = $1 AND po.is_correct = true`,
+      [hostId]
+    );
+    const totalQuizzes = parseInt(quizzesRes.rows[0].count, 10);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        totalSessions,
+        totalParticipants,
+        totalResponses,
+        totalQuizzes
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

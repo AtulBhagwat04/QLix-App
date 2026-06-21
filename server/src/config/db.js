@@ -204,6 +204,8 @@ async function executeSQL(pgSql, pgParams = [], clientState = null) {
   let sql = pgSql;
   sql = sql.replace(/::uuid/gi, '');
   sql = sql.replace(/\bILIKE\b/gi, 'LIKE');
+  sql = sql.replace(/DATE_TRUNC\s*\(\s*'hour'\s*,\s*([\w_.]+)\s*\)/gi, "(substr($1, 1, 13) || ':00:00.000Z')");
+  sql = sql.replace(/DATE_TRUNC\s*\(\s*'day'\s*,\s*([\w_.]+)\s*\)/gi, "(substr($1, 1, 10) || 'T00:00:00.000Z')");
   
   // 3. Postgres style placeholders $1, $2 mapping to SQLite ?
   let params = pgParams;

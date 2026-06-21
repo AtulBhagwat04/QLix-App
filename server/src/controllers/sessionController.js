@@ -42,7 +42,12 @@ export const getSessions = async (req, res, next) => {
 
   try {
     const result = await db.query(
-      'SELECT * FROM sessions WHERE host_id = $1 ORDER BY created_at DESC',
+      `SELECT s.*, 
+        (SELECT COUNT(*) FROM participants WHERE session_id = s.id) as participant_count,
+        (SELECT COUNT(*) FROM polls WHERE session_id = s.id) as poll_count
+       FROM sessions s 
+       WHERE s.host_id = $1 
+       ORDER BY s.created_at DESC`,
       [hostId]
     );
 
