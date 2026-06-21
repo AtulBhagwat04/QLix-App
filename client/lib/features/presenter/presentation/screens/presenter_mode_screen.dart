@@ -253,122 +253,128 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               child: Column(
                 children: [
                   // Presentation Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.success,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                'LIVE PRESENTATION',
-                                style: TextStyle(
-                                  color: AppColors.success,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _session!['title'] as String,
-                            style: const TextStyle(
-                              color: AppColors.textPrimaryDark,
-                              fontSize: 36,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -1.0,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Live Audience Engagement Dashboard',
-                            style: TextStyle(
-                              color: AppColors.textSecondaryDark,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surfaceDark.withOpacity(0.55),
-                          borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.35), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withOpacity(0.15),
-                              blurRadius: 16,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: Row(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = MediaQuery.of(context).size.width < 800;
+                      if (isMobile) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.2),
-                                    blurRadius: 8,
-                                  ),
-                                ],
-                              ),
-                              child: QrImageView(
-                                data: 'http://localhost:3000/session/$code',
-                                version: QrVersions.auto,
-                                size: 72,
-                                gapless: false,
-                                foregroundColor: Colors.black,
-                              ),
-                            ),
-                            const SizedBox(width: 20),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Row(
-                                  children: [
-                                    Text('Join at ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
-                                    Text('qlix.app', style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.bold, fontSize: 18)),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
                                 Row(
                                   children: [
-                                    const Text('Code: ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
-                                    Text(
-                                      code,
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 26,
-                                        letterSpacing: 1.0,
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.success,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'LIVE PRESENTATION',
+                                      style: TextStyle(
+                                        color: AppColors.success,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
                                       ),
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _session!['title'] as String,
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimaryDark,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Live Audience Engagement Dashboard',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondaryDark,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ],
                             ),
+                            const SizedBox(height: 20),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: _buildQrCard(code),
+                            ),
                           ],
-                        ),
-                      ),
-                    ],
+                        );
+                      }
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.success,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'LIVE PRESENTATION',
+                                      style: TextStyle(
+                                        color: AppColors.success,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  _session!['title'] as String,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: AppColors.textPrimaryDark,
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -1.0,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Live Audience Engagement Dashboard',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppColors.textSecondaryDark,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          _buildQrCard(code),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 36),
                   const Divider(color: Colors.white12),
@@ -376,26 +382,122 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
 
                   // Split View: Active poll results on the left, Q&A pinned list on the right
                   Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Left: Poll Results
-                        Expanded(
-                          flex: 3,
-                          child: _buildActivePresentationPanel(),
-                        ),
-                        const SizedBox(width: 36),
-                        // Right: Live Q&A
-                        Expanded(
-                          flex: 2,
-                          child: _buildQaPresentationPanel(),
-                        ),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobile = MediaQuery.of(context).size.width < 900;
+                        if (isMobile) {
+                          return SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                // Top: Poll Results
+                                SizedBox(
+                                  height: 420,
+                                  child: _buildActivePresentationPanel(),
+                                ),
+                                const SizedBox(height: 24),
+                                // Bottom: Live Q&A
+                                SizedBox(
+                                  height: 380,
+                                  child: _buildQaPresentationPanel(),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Left: Poll Results
+                            Expanded(
+                              flex: 3,
+                              child: _buildActivePresentationPanel(),
+                            ),
+                            const SizedBox(width: 36),
+                            // Right: Live Q&A
+                            Expanded(
+                              flex: 2,
+                              child: _buildQaPresentationPanel(),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQrCard(String code) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDark.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+        border: Border.all(color: AppColors.primary.withOpacity(0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.15),
+            blurRadius: 16,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: QrImageView(
+              data: 'http://localhost:3000/session/$code',
+              version: QrVersions.auto,
+              size: 72,
+              gapless: false,
+              foregroundColor: Colors.black,
+            ),
+          ),
+          const SizedBox(width: 20),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Row(
+                children: [
+                  Text('Join at ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
+                  Text('qlix.app', style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Text('Code: ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
+                  Text(
+                    code,
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 26,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -418,21 +520,26 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.slideshow_rounded, size: 96, color: Colors.white.withOpacity(0.15)),
-                const SizedBox(height: 24),
-                const Text(
-                  'Welcome! We\'re ready to start.',
-                  style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 26, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Please join the session room using the access code above to participate.',
-                  style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16),
-                ),
-              ],
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.slideshow_rounded, size: 96, color: Colors.white.withOpacity(0.15)),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Welcome! We\'re ready to start.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 26, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Please join the session room using the access code above to participate.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -560,37 +667,41 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Stack(
-                    children: [
-                      Container(
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
-                        ),
-                      ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeOutCubic,
-                        height: 18,
-                        width: MediaQuery.of(context).size.width * 0.45 * (percent / 100),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isCorrect
-                                ? [AppColors.success, Colors.tealAccent]
-                                : [AppColors.primary, AppColors.purpleAccent],
-                          ),
-                          borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
-                          boxShadow: [
-                            BoxShadow(
-                              color: (isCorrect ? AppColors.success : AppColors.primary).withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Stack(
+                        children: [
+                          Container(
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
+                          ),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 600),
+                            curve: Curves.easeOutCubic,
+                            height: 18,
+                            width: constraints.maxWidth * (percent / 100),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: isCorrect
+                                    ? [AppColors.success, Colors.tealAccent]
+                                    : [AppColors.primary, AppColors.purpleAccent],
+                              ),
+                              borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: (isCorrect ? AppColors.success : AppColors.primary).withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -763,18 +874,22 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.secondary.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
-                        ),
-                        child: Text(
-                          author,
-                          style: const TextStyle(
-                            color: AppColors.secondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                          ),
+                          child: Text(
+                            author,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.secondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -929,12 +1044,16 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                                   ),
                                 ),
                                 const SizedBox(width: 16),
-                                Text(
-                                  name,
-                                  style: const TextStyle(
-                                    color: AppColors.textPrimaryDark,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimaryDark,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                                 const Spacer(),
@@ -980,23 +1099,31 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           style: const TextStyle(fontSize: 28),
         ),
         const SizedBox(height: 6),
-        Text(
-          name,
-          style: const TextStyle(
-            color: AppColors.textPrimaryDark,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+        SizedBox(
+          width: 90,
+          child: Text(
+            name,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textPrimaryDark,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 4),
-        Text(
-          '$score pts',
-          style: TextStyle(
-            color: gradient[0],
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
+        SizedBox(
+          width: 90,
+          child: Text(
+            '$score pts',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: gradient[0],
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -1173,21 +1300,26 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
-                                  ),
-                                  child: Text(
-                                    '— $author',
-                                    style: const TextStyle(
-                                      color: AppColors.textSecondaryDark,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.05),
+                                      borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                                    ),
+                                    child: Text(
+                                      '— $author',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondaryDark,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 Row(
                                   children: [
                                     const Icon(Icons.thumb_up_rounded, color: AppColors.secondary, size: 14),
