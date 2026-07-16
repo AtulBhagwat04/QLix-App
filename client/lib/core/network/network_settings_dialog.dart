@@ -9,7 +9,7 @@ import '../di/injection_container.dart';
 
 void showNetworkSettingsDialog(BuildContext context) {
   final cache = sl<CacheManager>();
-  final currentIp = cache.getServerIpOverride() ?? '10.197.55.64';
+  final currentIp = cache.getServerIpOverride() ?? '10.128.231.64';
   final controller = TextEditingController(text: currentIp);
 
   showDialog(

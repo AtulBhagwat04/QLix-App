@@ -248,7 +248,16 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       });
 
     } catch (e) {
-      // debug log
+      if (mounted) {
+        final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to initialize session: $errorMsg'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        context.go('/');
+      }
     }
   }
 

@@ -414,7 +414,19 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
               ),
             ),
           ),
-
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 10,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(
+                Icons.settings_ethernet_rounded,
+                color: Color(0xFF64748B),
+                size: 24,
+              ),
+              tooltip: 'Server Settings',
+              onPressed: () => showNetworkSettingsDialog(context),
+            ),
+          ),
         ],
       ),
     );

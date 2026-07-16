@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/storage/cache_manager.dart';
 import '../../../../core/di/injection_container.dart';
@@ -844,11 +845,101 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
     torchEnabled: false,
   );
   bool _isScanned = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  String? _parseSessionCode(String rawValue) {
+    if (rawValue.length == 6 && int.tryParse(rawValue) != null) {
+      return rawValue;
+    }
+    final uri = Uri.tryParse(rawValue);
+    if (uri != null && uri.pathSegments.isNotEmpty) {
+      final lastSegment = uri.pathSegments.last;
+      if (lastSegment.length == 6 && int.tryParse(lastSegment) != null) {
+        return lastSegment;
+      }
+    }
+    return null;
+  }
+
+  void _handleCode(String rawValue) {
+    if (_isScanned) return;
+    final sessionCode = _parseSessionCode(rawValue);
+    if (sessionCode != null) {
+      _isScanned = true;
+      widget.onCodeScanned(sessionCode);
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _errorMessage = "Invalid QLix Session QR code";
+      });
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _errorMessage = null;
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _pickAndScanImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      // Stop controller to prevent PlatformException during native image analysis
+      await _controller.stop();
+
+      final BarcodeCapture? barcodeCapture = await _controller.analyzeImage(image.path);
+      if (barcodeCapture != null && barcodeCapture.barcodes.isNotEmpty) {
+        final rawValue = barcodeCapture.barcodes.first.rawValue;
+        if (rawValue != null) {
+          final sessionCode = _parseSessionCode(rawValue);
+          if (sessionCode != null) {
+            _isScanned = true;
+            widget.onCodeScanned(sessionCode);
+            Navigator.pop(context);
+            return;
+          } else {
+            setState(() {
+              _errorMessage = "This is not a QLix Session QR code!";
+            });
+          }
+        }
+      } else {
+        setState(() {
+          _errorMessage = "No QR code found in selected image";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Failed to scan image: $e";
+      });
+    }
+
+    // Restart scanner stream if we didn't exit successfully
+    try {
+      await _controller.start();
+    } catch (startError) {
+      debugPrint('Failed to restart scanner after image pick: $startError');
+    }
+
+    if (_errorMessage != null) {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _errorMessage = null;
+          });
+        }
+      });
+    }
   }
 
   @override
@@ -857,7 +948,6 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // 1. Full-screen MobileScanner
           Positioned.fill(
             child: MobileScanner(
               controller: _controller,
@@ -867,34 +957,19 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
                 for (final barcode in barcodes) {
                   final rawValue = barcode.rawValue;
                   if (rawValue != null) {
-                    // Check raw 6-digit code
-                    if (rawValue.length == 6 &&
-                        int.tryParse(rawValue) != null) {
-                      _isScanned = true;
-                      widget.onCodeScanned(rawValue);
-                      Navigator.pop(context);
-                      break;
-                    }
-                    // Check URL like http://localhost:3000/session/123456
-                    final uri = Uri.tryParse(rawValue);
-                    if (uri != null && uri.pathSegments.isNotEmpty) {
-                      final lastSegment = uri.pathSegments.last;
-                      if (lastSegment.length == 6 &&
-                          int.tryParse(lastSegment) != null) {
-                        _isScanned = true;
-                        widget.onCodeScanned(lastSegment);
-                        Navigator.pop(context);
-                        break;
-                      }
-                    }
+                    _handleCode(rawValue);
+                    break;
                   }
                 }
               },
             ),
           ),
-          // 2. High fidelity HUD scanner overlay (covers full screen)
-          Positioned.fill(child: _ScannerOverlay(controller: _controller)),
-          // 3. Floating glassmorphic top header bar
+          Positioned.fill(
+            child: _ScannerOverlay(
+              controller: _controller,
+              onUploadPressed: _pickAndScanImage,
+            ),
+          ),
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 20,
@@ -919,9 +994,7 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SizedBox(
-                        width: 36,
-                      ), // Spacer to balance close button
+                      const SizedBox(width: 36),
                       const Text(
                         'Scan QR Code',
                         style: TextStyle(
@@ -952,6 +1025,42 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
               ),
             ),
           ),
+          if (_errorMessage != null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 80,
+              left: 20,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1084,10 +1193,12 @@ class _ScannerCutoutPainter extends CustomPainter {
 }
 
 // Interactive scanning laser overlay with animation
+// Interactive scanning laser overlay with animation
 class _ScannerOverlay extends StatefulWidget {
   final MobileScannerController controller;
+  final VoidCallback onUploadPressed;
 
-  const _ScannerOverlay({required this.controller});
+  const _ScannerOverlay({required this.controller, required this.onUploadPressed});
 
   @override
   State<_ScannerOverlay> createState() => _ScannerOverlayState();
@@ -1289,7 +1400,29 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                           ),
                         ),
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 20),
+                      // Gallery Picker
+                      _AnimatedScaleButton(
+                        onPressed: widget.onUploadPressed,
+                        child: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black.withValues(alpha: 0.5),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.photo_library_rounded,
+                            color: Colors.white70,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
                       // Camera Flip
                       _AnimatedScaleButton(
                         onPressed: () => widget.controller.switchCamera(),

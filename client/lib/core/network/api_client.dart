@@ -17,7 +17,7 @@ class ApiClient {
     } catch (_) {}
     if (kIsWeb) return 'http://localhost:3000/api';
     // Connect to host PC using its local Wi-Fi IP address (enables physical device testing)
-    return 'http://10.197.55.64:3000/api';
+    return 'http://10.128.231.64:3000/api';
   }
 
   void updateBaseUrl(String newIp) {
