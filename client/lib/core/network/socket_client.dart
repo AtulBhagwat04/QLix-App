@@ -16,7 +16,7 @@ class SocketClient {
     } catch (_) {}
     if (kIsWeb) return 'http://localhost:3000';
     // Connect to host PC using its local Wi-Fi IP address (enables physical device testing)
-    return 'http://10.197.55.64:3000';
+    return 'http://10.128.231.64:3000';
   }
 
   // Streams for reactive BLoC integrations

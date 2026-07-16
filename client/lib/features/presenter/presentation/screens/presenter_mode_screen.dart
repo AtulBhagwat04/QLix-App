@@ -21,7 +21,8 @@ class PresenterModeScreen extends StatefulWidget {
   State<PresenterModeScreen> createState() => _PresenterModeScreenState();
 }
 
-class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTickerProviderStateMixin {
+class _PresenterModeScreenState extends State<PresenterModeScreen>
+    with SingleTickerProviderStateMixin {
   final _socketClient = sl<SocketClient>();
 
   Map<String, dynamic>? _session;
@@ -81,7 +82,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
       }
 
       // Load initial Q&A questions
-      final questions = await sl<QaRepository>().getSessionQuestions(sessionId, status: 'approved', sortBy: 'popular');
+      final questions = await sl<QaRepository>().getSessionQuestions(
+        sessionId,
+        status: 'approved',
+        sortBy: 'popular',
+      );
       setState(() {
         _questions = questions;
       });
@@ -110,9 +115,14 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
       _qaSub = _socketClient.questionCreatedStream.listen((data) {
         final newQ = Map<String, dynamic>.from(data['question'] as Map);
         setState(() {
-          if (newQ['status'] == 'approved' && !_questions.any((q) => q['id'] == newQ['id'])) {
+          if (newQ['status'] == 'approved' &&
+              !_questions.any((q) => q['id'] == newQ['id'])) {
             _questions.insert(0, newQ);
-            _questions.sort((a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(a['upvotesCount'] as int? ?? 0));
+            _questions.sort(
+              (a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(
+                a['upvotesCount'] as int? ?? 0,
+              ),
+            );
           }
         });
       });
@@ -121,7 +131,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
         final updatedQ = Map<String, dynamic>.from(data['question'] as Map);
         setState(() {
           final index = _questions.indexWhere((q) => q['id'] == updatedQ['id']);
-          final isApproved = updatedQ['status'] == 'approved' || updatedQ['status'] == 'answered';
+          final isApproved =
+              updatedQ['status'] == 'approved' ||
+              updatedQ['status'] == 'answered';
 
           if (index != -1) {
             if (isApproved) {
@@ -132,7 +144,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           } else if (isApproved) {
             _questions.insert(0, updatedQ);
           }
-          _questions.sort((a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(a['upvotesCount'] as int? ?? 0));
+          _questions.sort(
+            (a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(
+              a['upvotesCount'] as int? ?? 0,
+            ),
+          );
         });
       });
 
@@ -145,7 +161,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               q['upvotesCount'] = count;
             }
           }
-          _questions.sort((a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(a['upvotesCount'] as int? ?? 0));
+          _questions.sort(
+            (a, b) => (b['upvotesCount'] as int? ?? 0).compareTo(
+              a['upvotesCount'] as int? ?? 0,
+            ),
+          );
         });
       });
 
@@ -163,7 +183,6 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           });
         }
       });
-
     } catch (e) {
       print(e);
     }
@@ -239,7 +258,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               ),
             ),
           ),
-          
+
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 100, sigmaY: 100),
@@ -384,7 +403,8 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final isMobile = MediaQuery.of(context).size.width < 900;
+                        final isMobile =
+                            MediaQuery.of(context).size.width < 900;
                         if (isMobile) {
                           return SingleChildScrollView(
                             child: Column(
@@ -439,7 +459,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
       decoration: BoxDecoration(
         color: AppColors.surfaceDark.withOpacity(0.55),
         borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-        border: Border.all(color: AppColors.primary.withOpacity(0.35), width: 1.5),
+        border: Border.all(
+          color: AppColors.primary.withOpacity(0.35),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withOpacity(0.15),
@@ -457,10 +480,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               color: Colors.white,
               borderRadius: BorderRadius.circular(AppSizes.radiusCard),
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 8,
-                ),
+                BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
               ],
             ),
             child: QrImageView(
@@ -472,32 +492,35 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
             ),
           ),
           const SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Row(
-                children: [
-                  Text('Join at ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
-                  Text('qlix.app', style: TextStyle(color: AppColors.textPrimaryDark, fontWeight: FontWeight.bold, fontSize: 18)),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  const Text('Code: ', style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16)),
-                  Text(
-                    code,
-                    style: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 26,
-                      letterSpacing: 1.0,
-                    ),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: 'Session Code : ',
+                        style: TextStyle(
+                          color: AppColors.textSecondaryDark,
+                          fontSize: 16,
+                        ),
+                      ),
+                      TextSpan(
+                        text: code,
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 26,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -525,18 +548,29 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.slideshow_rounded, size: 96, color: Colors.white.withOpacity(0.15)),
+                  Icon(
+                    Icons.slideshow_rounded,
+                    size: 96,
+                    color: Colors.white.withOpacity(0.15),
+                  ),
                   const SizedBox(height: 24),
                   const Text(
                     'Welcome! We\'re ready to start.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textPrimaryDark, fontSize: 26, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: AppColors.textPrimaryDark,
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const Text(
                     'Please join the session room using the access code above to participate.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16),
+                    style: TextStyle(
+                      color: AppColors.textSecondaryDark,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -575,11 +609,16 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.3),
+                      ),
                     ),
                     child: Text(
                       type.replaceAll('_', ' ').toUpperCase(),
@@ -613,9 +652,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                 ),
               ),
               const SizedBox(height: 36),
-              Expanded(
-                child: _buildChartRenderer(type, results),
-              ),
+              Expanded(child: _buildChartRenderer(type, results)),
             ],
           ),
         ),
@@ -659,7 +696,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                       Text(
                         '$percent%',
                         style: TextStyle(
-                          color: isCorrect ? AppColors.success : AppColors.textPrimaryDark,
+                          color: isCorrect
+                              ? AppColors.success
+                              : AppColors.textPrimaryDark,
                           fontSize: 18,
                           fontWeight: FontWeight.w900,
                         ),
@@ -675,7 +714,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                             height: 18,
                             decoration: BoxDecoration(
                               color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                              borderRadius: BorderRadius.circular(
+                                AppSizes.radiusBadge,
+                              ),
                             ),
                           ),
                           AnimatedContainer(
@@ -687,12 +728,21 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                               gradient: LinearGradient(
                                 colors: isCorrect
                                     ? [AppColors.success, Colors.tealAccent]
-                                    : [AppColors.primary, AppColors.purpleAccent],
+                                    : [
+                                        AppColors.primary,
+                                        AppColors.purpleAccent,
+                                      ],
                               ),
-                              borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                              borderRadius: BorderRadius.circular(
+                                AppSizes.radiusBadge,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: (isCorrect ? AppColors.success : AppColors.primary).withOpacity(0.3),
+                                  color:
+                                      (isCorrect
+                                              ? AppColors.success
+                                              : AppColors.primary)
+                                          .withOpacity(0.3),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -721,7 +771,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                 decoration: BoxDecoration(
                   color: AppColors.surfaceDark.withOpacity(0.3),
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.secondary.withOpacity(0.3), width: 2),
+                  border: Border.all(
+                    color: AppColors.secondary.withOpacity(0.3),
+                    width: 2,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.secondary.withOpacity(0.1),
@@ -740,10 +793,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                         fontSize: 84,
                         fontWeight: FontWeight.w900,
                         shadows: [
-                          Shadow(
-                            color: AppColors.secondary,
-                            blurRadius: 20,
-                          ),
+                          Shadow(color: AppColors.secondary, blurRadius: 20),
                         ],
                       ),
                     ),
@@ -765,7 +815,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               const SizedBox(height: 20),
               Text(
                 'Based on $totalVotes total rating ratings',
-                style: const TextStyle(color: AppColors.textSecondaryDark, fontSize: 16, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: AppColors.textSecondaryDark,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -777,7 +831,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           return const Center(
             child: Text(
               'No words submitted yet',
-              style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16),
+              style: TextStyle(
+                color: AppColors.textSecondaryDark,
+                fontSize: 16,
+              ),
             ),
           );
         }
@@ -793,11 +850,17 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                 final val = w['value'] as int? ?? 0;
                 final baseColor = _getWordColor(val);
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: baseColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                    border: Border.all(color: baseColor.withOpacity(0.3), width: 1),
+                    border: Border.all(
+                      color: baseColor.withOpacity(0.3),
+                      width: 1,
+                    ),
                   ),
                   child: Text(
                     text,
@@ -825,7 +888,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           return const Center(
             child: Text(
               'No responses submitted yet',
-              style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 16),
+              style: TextStyle(
+                color: AppColors.textSecondaryDark,
+                fontSize: 16,
+              ),
             ),
           );
         }
@@ -876,10 +942,15 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                     children: [
                       Flexible(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.secondary.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusBadge,
+                            ),
                           ),
                           child: Text(
                             author,
@@ -939,7 +1010,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.emoji_events_rounded, color: Colors.amber, size: 36),
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    color: Colors.amber,
+                    size: 36,
+                  ),
                   const SizedBox(width: 12),
                   const Text(
                     'QUIZ LEADERBOARD',
@@ -969,7 +1044,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                           score: top3[1]['score'] as int? ?? 0,
                           rank: 2,
                           height: 110,
-                          gradient: const [Color(0xFFCFD8DC), Color(0xFF78909C)],
+                          gradient: const [
+                            Color(0xFFCFD8DC),
+                            Color(0xFF78909C),
+                          ],
                         ),
                       const SizedBox(width: 20),
 
@@ -990,7 +1068,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                           score: top3[2]['score'] as int? ?? 0,
                           rank: 3,
                           height: 80,
-                          gradient: const [Color(0xFFFFAB91), Color(0xFFD84315)],
+                          gradient: const [
+                            Color(0xFFFFAB91),
+                            Color(0xFFD84315),
+                          ],
                         ),
                     ],
                   ),
@@ -1005,7 +1086,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                     ? const Center(
                         child: Text(
                           'No other participants on the board yet',
-                          style: TextStyle(color: AppColors.textSecondaryDark, fontSize: 14),
+                          style: TextStyle(
+                            color: AppColors.textSecondaryDark,
+                            fontSize: 14,
+                          ),
                         ),
                       )
                     : ListView.builder(
@@ -1018,11 +1102,18 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.cardDark.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              borderRadius: BorderRadius.circular(
+                                AppSizes.radiusCard,
+                              ),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -1088,16 +1179,13 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
     final medalIcon = rank == 1
         ? '👑'
         : rank == 2
-            ? '🥈'
-            : '🥉';
+        ? '🥈'
+        : '🥉';
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        Text(
-          medalIcon,
-          style: const TextStyle(fontSize: 28),
-        ),
+        Text(medalIcon, style: const TextStyle(fontSize: 28)),
         const SizedBox(height: 6),
         SizedBox(
           width: 90,
@@ -1174,7 +1262,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
           children: [
             Row(
               children: [
-                const Icon(Icons.forum_rounded, color: AppColors.primary, size: 24),
+                const Icon(
+                  Icons.forum_rounded,
+                  color: AppColors.primary,
+                  size: 24,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Live Q&A',
@@ -1242,10 +1334,18 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isPinned
-                              ? [AppColors.primary.withOpacity(0.18), AppColors.purpleAccent.withOpacity(0.12)]
-                              : [AppColors.cardDark.withOpacity(0.35), AppColors.cardDark.withOpacity(0.25)],
+                              ? [
+                                  AppColors.primary.withOpacity(0.18),
+                                  AppColors.purpleAccent.withOpacity(0.12),
+                                ]
+                              : [
+                                  AppColors.cardDark.withOpacity(0.35),
+                                  AppColors.cardDark.withOpacity(0.25),
+                                ],
                         ),
-                        borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+                        borderRadius: BorderRadius.circular(
+                          AppSizes.radiusCard,
+                        ),
                         border: Border.all(
                           color: isPinned
                               ? AppColors.primary.withOpacity(0.4)
@@ -1258,7 +1358,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                                   color: AppColors.primary.withOpacity(0.15),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
-                                )
+                                ),
                               ]
                             : [],
                       ),
@@ -1273,7 +1373,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                                 padding: const EdgeInsets.only(bottom: 10),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.push_pin_rounded, color: AppColors.accent, size: 14),
+                                    const Icon(
+                                      Icons.push_pin_rounded,
+                                      color: AppColors.accent,
+                                      size: 14,
+                                    ),
                                     const SizedBox(width: 6),
                                     const Text(
                                       'PINNED QUESTION',
@@ -1302,10 +1406,15 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                               children: [
                                 Flexible(
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.black.withOpacity(0.05),
-                                      borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+                                      borderRadius: BorderRadius.circular(
+                                        AppSizes.radiusBadge,
+                                      ),
                                     ),
                                     child: Text(
                                       '— $author',
@@ -1322,7 +1431,11 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
                                 const SizedBox(width: 8),
                                 Row(
                                   children: [
-                                    const Icon(Icons.thumb_up_rounded, color: AppColors.secondary, size: 14),
+                                    const Icon(
+                                      Icons.thumb_up_rounded,
+                                      color: AppColors.secondary,
+                                      size: 14,
+                                    ),
                                     const SizedBox(width: 6),
                                     Text(
                                       '$upvotes',
@@ -1347,5 +1460,3 @@ class _PresenterModeScreenState extends State<PresenterModeScreen> with SingleTi
     );
   }
 }
-
-
