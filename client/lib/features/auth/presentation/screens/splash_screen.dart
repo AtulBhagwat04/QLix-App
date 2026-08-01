@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_sizes.dart';
 
 class HostSplashWidget extends StatefulWidget {
   const HostSplashWidget({super.key});
@@ -49,9 +47,21 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
   Future<void> _handleRedirection() async {
     if (!mounted) return;
 
-    // Temporarily force onboarding redirection for design/preview phase
-    if (mounted) {
+    final secureStorage = sl<SecureStorageService>();
+    final hasSeenOnboarding = await secureStorage.getHasSeenOnboarding();
+
+    if (!mounted) return;
+
+    if (!hasSeenOnboarding) {
       context.go('/onboarding');
+    } else {
+      final token = await secureStorage.getAccessToken();
+      if (!mounted) return;
+      if (token != null) {
+        context.go('/dashboard');
+      } else {
+        context.go('/');
+      }
     }
   }
 
@@ -86,8 +96,8 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF6366F1).withOpacity(0.08),
-                    const Color(0xFF6366F1).withOpacity(0.0),
+                    const Color(0xFF6366F1).withValues(alpha: 0.08),
+                    const Color(0xFF6366F1).withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -285,7 +295,9 @@ class _HostSplashWidgetState extends State<HostSplashWidget>
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF06B6D4).withOpacity(0.25),
+                              color: const Color(
+                                0xFF06B6D4,
+                              ).withValues(alpha: 0.25),
                               blurRadius: 6,
                               spreadRadius: 1,
                             ),
@@ -339,7 +351,7 @@ class _StarsPainter extends CustomPainter {
             0.12,
           ));
 
-      paint.color = const Color(0xFF6366F1).withOpacity(twinkleOpacity);
+      paint.color = const Color(0xFF6366F1).withValues(alpha: twinkleOpacity);
       canvas.drawCircle(Offset(x, y), radius, paint);
     }
   }
@@ -371,7 +383,7 @@ class _FloatingBubble extends StatelessWidget {
       decoration: BoxDecoration(
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -379,7 +391,7 @@ class _FloatingBubble extends StatelessWidget {
       ),
       child: CustomPaint(
         painter: _SpeechBubbleBorderPainter(
-          color: bubbleColor.withOpacity(0.4),
+          color: bubbleColor.withValues(alpha: 0.4),
           tailOnLeft: tailOnLeft,
         ),
         child: ClipPath(
@@ -389,17 +401,13 @@ class _FloatingBubble extends StatelessWidget {
             child: Container(
               width: 48,
               height: 48,
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               child: Center(
                 child: Container(
                   margin: const EdgeInsets.only(
                     bottom: 5,
                   ), // Account for tail height
-                  child: Icon(
-                    icon,
-                    size: 22,
-                    color: bubbleColor,
-                  ),
+                  child: Icon(icon, size: 22, color: bubbleColor),
                 ),
               ),
             ),
@@ -471,7 +479,7 @@ class _SpeechBubbleBorderPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [color.withOpacity(0.95), color.withOpacity(0.3)],
+        colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0.3)],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     canvas.drawPath(path, paint);
@@ -502,7 +510,7 @@ class _LogoPainter extends CustomPainter {
       0.22,
     );
     final shadowPaint = Paint()
-      ..color = const Color(0xFF6366F1).withOpacity(shadowOpacity)
+      ..color = const Color(0xFF6366F1).withValues(alpha: shadowOpacity)
       ..imageFilter = ImageFilter.blur(sigmaX: 12, sigmaY: 12);
 
     final outerD = Path()

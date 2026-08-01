@@ -13,16 +13,17 @@ export const createPoll = async (req, res, next) => {
 
       // Get count of polls to determine next order_index
       const countRes = await client.query(
-        'SELECT COUNT(*) FROM polls WHERE session_id = $1',
+        'SELECT COUNT(*) as count FROM polls WHERE session_id = $1',
         [sessionId]
       );
-      const orderIndex = parseInt(countRes.rows[0].count, 10);
+      const rawCount = countRes.rows[0]?.count ?? countRes.rows[0]?.['COUNT(*)'] ?? countRes.rows[0]?.['count(*)'] ?? 0;
+      const orderIndex = parseInt(rawCount, 10) || 0;
 
       const pollRes = await client.query(
         `INSERT INTO polls (session_id, title, type, settings, order_index)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING *`,
-        [sessionId, title, type, JSON.stringify(settings || {}), orderIndex]
+        [sessionId, title, type, settings || {}, orderIndex]
       );
 
       const poll = pollRes.rows[0];
@@ -75,7 +76,15 @@ export const getSessionPolls = async (req, res, next) => {
         'SELECT * FROM poll_options WHERE poll_id = $1 ORDER BY order_index ASC',
         [polls[i].id]
       );
-      polls[i].options = optRes.rows;
+      polls[i].options = optRes.rows.map(opt => ({
+        id: opt.id,
+        pollId: opt.poll_id,
+        optionText: opt.option_text,
+        option_text: opt.option_text,
+        isCorrect: opt.is_correct,
+        orderIndex: opt.order_index
+      }));
+      polls[i].results = await calculatePollResults(polls[i]);
     }
 
     res.status(200).json({
@@ -137,7 +146,7 @@ export const updatePoll = async (req, res, next) => {
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $4
          RETURNING *`,
-        [title, status, settings ? JSON.stringify(settings) : null, id]
+        [title, status, settings || null, id]
       );
 
       const poll = pollRes.rows[0];
@@ -216,13 +225,30 @@ export const getPollResults = async (req, res, next) => {
     }
     const poll = pollRes.rows[0];
 
+    const optRes = await db.query(
+      'SELECT * FROM poll_options WHERE poll_id = $1 ORDER BY order_index ASC',
+      [id]
+    );
+    poll.options = optRes.rows.map(opt => ({
+      id: opt.id,
+      pollId: opt.poll_id,
+      optionText: opt.option_text,
+      option_text: opt.option_text,
+      isCorrect: opt.is_correct,
+      orderIndex: opt.order_index
+    }));
+
     const results = await calculatePollResults(poll);
 
     res.status(200).json({
       status: 'success',
       data: {
-        pollId: id,
+        id: poll.id,
+        pollId: poll.id,
+        title: poll.title,
         type: poll.type,
+        status: poll.status,
+        options: poll.options,
         results,
       },
     });

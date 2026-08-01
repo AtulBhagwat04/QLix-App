@@ -27,9 +27,13 @@ class QaRepositoryImpl implements QaRepository {
 
     if (response.statusCode == 200 && response.data != null) {
       final list = response.data['data'] as List;
-      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      return list
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
     }
-    throw Exception(response.data?['message'] ?? 'Failed to load Q&A questions');
+    throw Exception(
+      response.data?['message'] ?? 'Failed to load Q&A questions',
+    );
   }
 
   @override
@@ -46,6 +50,8 @@ class QaRepositoryImpl implements QaRepository {
     if (response.statusCode == 200 && response.data != null) {
       return Map<String, dynamic>.from(response.data['data'] as Map);
     }
-    throw Exception(response.data?['message'] ?? 'Failed to update question status');
+    throw Exception(
+      response.data?['message'] ?? 'Failed to update question status',
+    );
   }
 }

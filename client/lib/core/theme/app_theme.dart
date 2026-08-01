@@ -29,11 +29,9 @@ class AppTheme {
         primary: AppColors.primary,
         secondary: AppColors.secondary,
         tertiary: AppColors.accent,
-        background: AppColors.backgroundLight,
         surface: AppColors.surfaceLight,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onBackground: AppColors.textPrimaryLight,
         onSurface: AppColors.textPrimaryLight,
       ),
       scaffoldBackgroundColor: AppColors.backgroundLight,
@@ -60,7 +58,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF1F5F9),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
         enabledBorder: OutlineInputBorder(
           borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
           borderRadius: BorderRadius.circular(AppSizes.radiusInput),
@@ -77,7 +78,11 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.error, width: 2.0),
           borderRadius: BorderRadius.circular(AppSizes.radiusInput),
         ),
-        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondaryLight),
+        labelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondaryLight,
+        ),
         hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -104,17 +109,49 @@ class AppTheme {
       ),
       textTheme: _isTest
           ? const TextTheme(
-              headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight, letterSpacing: -0.5),
-              titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight, letterSpacing: -0.2),
-              bodyLarge: TextStyle(fontSize: 16, color: AppColors.textSecondaryLight),
-              bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryLight),
+              headlineMedium: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryLight,
+                letterSpacing: -0.5,
+              ),
+              titleLarge: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimaryLight,
+                letterSpacing: -0.2,
+              ),
+              bodyLarge: TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondaryLight,
+              ),
+              bodyMedium: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryLight,
+              ),
             )
           : GoogleFonts.montserratTextTheme(
               const TextTheme(
-                headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight, letterSpacing: -0.5),
-                titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight, letterSpacing: -0.2),
-                bodyLarge: TextStyle(fontSize: 16, color: AppColors.textSecondaryLight),
-                bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryLight),
+                headlineMedium: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimaryLight,
+                  letterSpacing: -0.5,
+                ),
+                titleLarge: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimaryLight,
+                  letterSpacing: -0.2,
+                ),
+                bodyLarge: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textSecondaryLight,
+                ),
+                bodyMedium: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondaryLight,
+                ),
               ),
             ),
     );
@@ -129,11 +166,9 @@ class AppTheme {
         primary: AppColors.primary,
         secondary: AppColors.secondary,
         tertiary: AppColors.accent,
-        background: AppColors.backgroundDark,
         surface: AppColors.surfaceDark,
         onPrimary: Colors.white,
         onSecondary: Colors.white,
-        onBackground: AppColors.textPrimaryDark,
         onSurface: AppColors.textPrimaryDark,
       ),
       scaffoldBackgroundColor: AppColors.backgroundDark,
@@ -160,7 +195,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF1F5F9),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 18,
+        ),
         enabledBorder: OutlineInputBorder(
           borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1.0),
           borderRadius: BorderRadius.circular(AppSizes.radiusInput),
@@ -177,7 +215,11 @@ class AppTheme {
           borderSide: const BorderSide(color: AppColors.error, width: 2.0),
           borderRadius: BorderRadius.circular(AppSizes.radiusInput),
         ),
-        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondaryDark),
+        labelStyle: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondaryDark,
+        ),
         hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -204,17 +246,49 @@ class AppTheme {
       ),
       textTheme: _isTest
           ? const TextTheme(
-              headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryDark, letterSpacing: -0.5),
-              titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryDark, letterSpacing: -0.2),
-              bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimaryDark),
-              bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryDark),
+              headlineMedium: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimaryDark,
+                letterSpacing: -0.5,
+              ),
+              titleLarge: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimaryDark,
+                letterSpacing: -0.2,
+              ),
+              bodyLarge: TextStyle(
+                fontSize: 16,
+                color: AppColors.textPrimaryDark,
+              ),
+              bodyMedium: TextStyle(
+                fontSize: 14,
+                color: AppColors.textSecondaryDark,
+              ),
             )
           : GoogleFonts.montserratTextTheme(
               const TextTheme(
-                headlineMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimaryDark, letterSpacing: -0.5),
-                titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryDark, letterSpacing: -0.2),
-                bodyLarge: TextStyle(fontSize: 16, color: AppColors.textPrimaryDark),
-                bodyMedium: TextStyle(fontSize: 14, color: AppColors.textSecondaryDark),
+                headlineMedium: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimaryDark,
+                  letterSpacing: -0.5,
+                ),
+                titleLarge: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimaryDark,
+                  letterSpacing: -0.2,
+                ),
+                bodyLarge: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textPrimaryDark,
+                ),
+                bodyMedium: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textSecondaryDark,
+                ),
               ),
             ),
     );
@@ -229,15 +303,12 @@ class AppDecoration {
     double opacity = 0.65,
   }) {
     return BoxDecoration(
-      color: Colors.white.withOpacity(opacity),
+      color: Colors.white.withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(borderRadius),
-      border: Border.all(
-        color: const Color(0xFFE2E8F0),
-        width: 1.0,
-      ),
+      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.0),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withValues(alpha: 0.04),
           blurRadius: 24,
           offset: const Offset(0, 8),
         ),
@@ -257,11 +328,14 @@ class AppDecoration {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: Container(
-          decoration: glass(context: context, borderRadius: borderRadius, opacity: opacity),
+          decoration: glass(
+            context: context,
+            borderRadius: borderRadius,
+            opacity: opacity,
+          ),
           child: child,
         ),
       ),
     );
   }
 }
-

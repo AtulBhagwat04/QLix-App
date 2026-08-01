@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/storage/cache_manager.dart';
+import '../../../../core/storage/secure_storage.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
@@ -25,10 +26,22 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
   final _codeController = TextEditingController();
   final _codeFocusNode = FocusNode();
   bool _hasCodeError = false;
+  bool _isLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    final secureStorage = sl<SecureStorageService>();
+    final token = await secureStorage.getAccessToken();
+    if (mounted) {
+      setState(() {
+        _isLoggedIn = token != null;
+      });
+    }
   }
 
   @override
@@ -485,30 +498,31 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                     const SizedBox(height: 20),
 
                     // Bottom Host Link Option
-                    Column(
-                      children: [
-                        const Text(
-                          'Are you a Host?',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        InkWell(
-                          onTap: () => context.go('/login'),
-                          child: const Text(
-                            'Login As Host',
+                    if (!_isLoggedIn)
+                      Column(
+                        children: [
+                          const Text(
+                            'Are you a Host?',
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                              color: Color(0xFF64748B),
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ),
-                      ],
-                    ).animate().fadeIn(delay: 350.ms, duration: 400.ms),
+                          const SizedBox(height: 6),
+                          InkWell(
+                            onTap: () => context.go('/login'),
+                            child: const Text(
+                              'Login As Host',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ).animate().fadeIn(delay: 350.ms, duration: 400.ms),
                     const SizedBox(height: 12),
                   ],
                 ),
@@ -897,7 +911,9 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
       // Stop controller to prevent PlatformException during native image analysis
       await _controller.stop();
 
-      final BarcodeCapture? barcodeCapture = await _controller.analyzeImage(image.path);
+      final BarcodeCapture? barcodeCapture = await _controller.analyzeImage(
+        image.path,
+      );
       if (barcodeCapture != null && barcodeCapture.barcodes.isNotEmpty) {
         final rawValue = barcodeCapture.barcodes.first.rawValue;
         if (rawValue != null) {
@@ -1031,13 +1047,16 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
               left: 20,
               right: 20,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withOpacity(0.9),
+                  color: AppColors.error.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -1045,7 +1064,11 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
@@ -1198,7 +1221,10 @@ class _ScannerOverlay extends StatefulWidget {
   final MobileScannerController controller;
   final VoidCallback onUploadPressed;
 
-  const _ScannerOverlay({required this.controller, required this.onUploadPressed});
+  const _ScannerOverlay({
+    required this.controller,
+    required this.onUploadPressed,
+  });
 
   @override
   State<_ScannerOverlay> createState() => _ScannerOverlayState();
@@ -1231,10 +1257,11 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final height = constraints.maxHeight;
+    return Builder(
+      builder: (context) {
+        final mediaSize = MediaQuery.of(context).size;
+        final width = mediaSize.width;
+        final height = mediaSize.height;
 
         // Centered cutout dimensions
         final cutoutSize = math.min(width, height) * 0.65;

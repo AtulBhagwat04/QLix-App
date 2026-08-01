@@ -66,4 +66,3 @@ class AppTextStyles {
     color: Colors.grey,
   );
 }
-

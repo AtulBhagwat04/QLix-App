@@ -33,7 +33,7 @@ export default function registerSocketHandlers(io) {
       try {
         // Find session
         const sessionRes = await db.query(
-          'SELECT id, title, state FROM sessions WHERE access_code = $1',
+          'SELECT id, title, state FROM sessions WHERE access_code = $1 OR id = $1',
           [accessCode]
         );
 
@@ -67,35 +67,45 @@ export default function registerSocketHandlers(io) {
     // 2. Host Activates Poll
     socket.on('activate_poll', async ({ sessionId, pollId }) => {
       try {
-        const roomName = `session:${sessionId}`;
+        const sessionRes = await db.query(
+          'SELECT id FROM sessions WHERE id = $1 OR access_code = $1',
+          [sessionId]
+        );
+        const targetSessionId = sessionRes.rows[0]?.id || sessionId;
+        const roomName = `session:${targetSessionId}`;
 
         if (pollId) {
-          // End any currently active polls in this session
-          await db.query(
-            "UPDATE polls SET status = 'ended' WHERE session_id = $1 AND status = 'active'",
-            [sessionId]
-          );
-
-          // Deactivate any currently active poll for this session
+          // Activate target poll in sessions and polls table
           await db.query(
             'UPDATE sessions SET active_poll_id = $1 WHERE id = $2',
             [pollId, sessionId]
           );
           
           await db.query(
-            'UPDATE polls SET status = \'active\' WHERE id = $1',
+            "UPDATE polls SET status = 'active' WHERE id = $1",
             [pollId]
           );
 
           // Retrieve active poll details
           const pollRes = await db.query('SELECT * FROM polls WHERE id = $1', [pollId]);
+          if (pollRes.rows.length === 0) return;
           const poll = pollRes.rows[0];
 
           const optionsRes = await db.query(
             'SELECT * FROM poll_options WHERE poll_id = $1 ORDER BY order_index ASC',
             [pollId]
           );
-          poll.options = optionsRes.rows;
+          poll.options = optionsRes.rows.map(opt => ({
+            id: opt.id,
+            pollId: opt.poll_id,
+            optionText: opt.option_text,
+            option_text: opt.option_text,
+            isCorrect: opt.is_correct,
+            orderIndex: opt.order_index
+          }));
+
+          const results = await calculatePollResults(poll);
+          poll.results = results;
 
           // Broadcast active poll info to room
           io.to(roomName).emit('poll_activated', { poll });

@@ -39,8 +39,12 @@ Future<void> initDI() async {
   sl.registerSingleton<SocketClient>(socketClient);
 
   // 3. Repositories
-  sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(sl(), sl()));
-  sl.registerLazySingleton<SessionRepository>(() => SessionRepositoryImpl(sl()));
+  sl.registerLazySingleton<AuthRepository>(
+    () => AuthRepositoryImpl(sl(), sl()),
+  );
+  sl.registerLazySingleton<SessionRepository>(
+    () => SessionRepositoryImpl(sl(), sl()),
+  );
   sl.registerLazySingleton<PollRepository>(() => PollRepositoryImpl(sl()));
   sl.registerLazySingleton<QaRepository>(() => QaRepositoryImpl(sl()));
   sl.registerLazySingleton<QuizRepository>(() => QuizRepositoryImpl(sl()));

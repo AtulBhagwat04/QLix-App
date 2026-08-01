@@ -2,9 +2,8 @@ import 'dart:async';
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/socket_client.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
@@ -229,7 +228,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               width: 400,
               height: 400,
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.18),
+                color: AppColors.primary.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
             ),
@@ -241,7 +240,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               width: 500,
               height: 500,
               decoration: BoxDecoration(
-                color: AppColors.secondary.withOpacity(0.15),
+                color: AppColors.secondary.withValues(alpha: 0.15),
                 shape: BoxShape.circle,
               ),
             ),
@@ -253,7 +252,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               width: 300,
               height: 300,
               decoration: BoxDecoration(
-                color: AppColors.purpleAccent.withOpacity(0.08),
+                color: AppColors.purpleAccent.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
             ),
@@ -272,8 +271,8 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               child: Column(
                 children: [
                   // Presentation Header
-                  LayoutBuilder(
-                    builder: (context, constraints) {
+                  Builder(
+                    builder: (context) {
                       final isMobile = MediaQuery.of(context).size.width < 800;
                       if (isMobile) {
                         return Column(
@@ -401,8 +400,8 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
 
                   // Split View: Active poll results on the left, Q&A pinned list on the right
                   Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
+                    child: Builder(
+                      builder: (context) {
                         final isMobile =
                             MediaQuery.of(context).size.width < 900;
                         if (isMobile) {
@@ -457,15 +456,15 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withOpacity(0.55),
+        color: AppColors.surfaceDark.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(AppSizes.radiusCard),
         border: Border.all(
-          color: AppColors.primary.withOpacity(0.35),
+          color: AppColors.primary.withValues(alpha: 0.35),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.15),
+            color: AppColors.primary.withValues(alpha: 0.15),
             blurRadius: 16,
             spreadRadius: 2,
           ),
@@ -480,11 +479,14 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               color: Colors.white,
               borderRadius: BorderRadius.circular(AppSizes.radiusCard),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                ),
               ],
             ),
             child: QrImageView(
-              data: 'http://localhost:3000/session/$code',
+              data: 'http://${ApiClient.defaultHost}:3000/session/$code',
               version: QrVersions.auto,
               size: 72,
               gapless: false,
@@ -535,9 +537,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
     if (_activePoll == null) {
       return Container(
         decoration: BoxDecoration(
-          color: AppColors.surfaceDark.withOpacity(0.45),
+          color: AppColors.surfaceDark.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         clipBehavior: Clip.antiAlias,
         child: BackdropFilter(
@@ -551,7 +553,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                   Icon(
                     Icons.slideshow_rounded,
                     size: 96,
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -586,12 +588,12 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withOpacity(0.45),
+        color: AppColors.surfaceDark.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(AppSizes.radiusCard),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -614,10 +616,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.15),
+                      color: AppColors.primary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(AppSizes.radiusPill),
                       border: Border.all(
-                        color: AppColors.primary.withOpacity(0.3),
+                        color: AppColors.primary.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(
@@ -706,52 +708,49 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                     ],
                   ),
                   const SizedBox(height: 12),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Stack(
-                        children: [
-                          Container(
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(
-                                AppSizes.radiusBadge,
-                              ),
-                            ),
+                  Stack(
+                    children: [
+                      Container(
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(
+                            AppSizes.radiusBadge,
                           ),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 600),
-                            curve: Curves.easeOutCubic,
-                            height: 18,
-                            width: constraints.maxWidth * (percent / 100),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: isCorrect
-                                    ? [AppColors.success, Colors.tealAccent]
-                                    : [
-                                        AppColors.primary,
-                                        AppColors.purpleAccent,
-                                      ],
-                              ),
-                              borderRadius: BorderRadius.circular(
-                                AppSizes.radiusBadge,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      (isCorrect
-                                              ? AppColors.success
-                                              : AppColors.primary)
-                                          .withOpacity(0.3),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        widthFactor: (percent / 100).clamp(0.0, 1.0),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 600),
+                          curve: Curves.easeOutCubic,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: isCorrect
+                                  ? [AppColors.success, Colors.tealAccent]
+                                  : [
+                                      AppColors.primary,
+                                      AppColors.purpleAccent,
+                                    ],
                             ),
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusBadge,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: (isCorrect
+                                        ? AppColors.success
+                                        : AppColors.primary)
+                                    .withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -769,15 +768,15 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceDark.withOpacity(0.3),
+                  color: AppColors.surfaceDark.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: AppColors.secondary.withOpacity(0.3),
+                    color: AppColors.secondary.withValues(alpha: 0.3),
                     width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.secondary.withOpacity(0.1),
+                      color: AppColors.secondary.withValues(alpha: 0.1),
                       blurRadius: 40,
                       spreadRadius: 10,
                     ),
@@ -855,10 +854,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: baseColor.withOpacity(0.1),
+                    color: baseColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(AppSizes.radiusCard),
                     border: Border.all(
-                      color: baseColor.withOpacity(0.3),
+                      color: baseColor.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),
@@ -870,7 +869,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                       fontWeight: FontWeight.bold,
                       shadows: [
                         Shadow(
-                          color: baseColor.withOpacity(0.4),
+                          color: baseColor.withValues(alpha: 0.4),
                           blurRadius: 6,
                         ),
                       ],
@@ -910,12 +909,12 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
             return Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppColors.cardDark.withOpacity(0.4),
+                color: AppColors.cardDark.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(AppSizes.radiusCard),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                   ),
                 ],
@@ -947,7 +946,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: AppColors.secondary.withOpacity(0.15),
+                            color: AppColors.secondary.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(
                               AppSizes.radiusBadge,
                             ),
@@ -989,12 +988,12 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceDark.withOpacity(0.45),
+        color: AppColors.surfaceDark.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(AppSizes.radiusCard),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.25),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -1107,7 +1106,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                               vertical: 14,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.cardDark.withOpacity(0.3),
+                              color: AppColors.cardDark.withValues(alpha: 0.3),
                               borderRadius: BorderRadius.circular(
                                 AppSizes.radiusCard,
                               ),
@@ -1122,7 +1121,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                                   height: 28,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.05),
+                                    color: Colors.black.withValues(alpha: 0.05),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Text(
@@ -1230,7 +1229,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: gradient[0].withOpacity(0.3),
+                color: gradient[0].withValues(alpha: 0.3),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -1281,7 +1280,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
+                color: Colors.black.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
                 border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
@@ -1306,7 +1305,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                       Icon(
                         Icons.chat_bubble_outline_rounded,
                         size: 48,
-                        color: AppColors.textSecondaryDark.withOpacity(0.4),
+                        color: AppColors.textSecondaryDark.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -1335,12 +1336,14 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                         gradient: LinearGradient(
                           colors: isPinned
                               ? [
-                                  AppColors.primary.withOpacity(0.18),
-                                  AppColors.purpleAccent.withOpacity(0.12),
+                                  AppColors.primary.withValues(alpha: 0.18),
+                                  AppColors.purpleAccent.withValues(
+                                    alpha: 0.12,
+                                  ),
                                 ]
                               : [
-                                  AppColors.cardDark.withOpacity(0.35),
-                                  AppColors.cardDark.withOpacity(0.25),
+                                  AppColors.cardDark.withValues(alpha: 0.35),
+                                  AppColors.cardDark.withValues(alpha: 0.25),
                                 ],
                         ),
                         borderRadius: BorderRadius.circular(
@@ -1348,14 +1351,16 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                         ),
                         border: Border.all(
                           color: isPinned
-                              ? AppColors.primary.withOpacity(0.4)
+                              ? AppColors.primary.withValues(alpha: 0.4)
                               : const Color(0xFFE2E8F0),
                           width: isPinned ? 1.5 : 1.0,
                         ),
                         boxShadow: isPinned
                             ? [
                                 BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.15),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
@@ -1411,7 +1416,9 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.05,
+                                      ),
                                       borderRadius: BorderRadius.circular(
                                         AppSizes.radiusBadge,
                                       ),

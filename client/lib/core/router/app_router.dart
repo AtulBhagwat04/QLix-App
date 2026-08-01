@@ -23,11 +23,6 @@ final GoRouter appRouter = GoRouter(
     final secureStorage = sl<SecureStorageService>();
     final path = state.uri.path;
 
-    // Temporarily disable redirects for onboarding during design phase
-    if (path == '/onboarding') {
-      return null;
-    }
-
     // Check if user has seen onboarding. If not, redirect to onboarding.
     final hasSeenOnboarding = await secureStorage.getHasSeenOnboarding();
     if (!hasSeenOnboarding && path != '/onboarding' && path != '/splash') {
@@ -51,7 +46,8 @@ final GoRouter appRouter = GoRouter(
       return '/login';
     }
 
-    if (isLoggedIn && (path == '/login' || path == '/signup' || path == '/onboarding')) {
+    if (isLoggedIn &&
+        (path == '/login' || path == '/signup' || path == '/onboarding')) {
       return '/dashboard';
     }
 

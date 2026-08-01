@@ -42,8 +42,8 @@ const startServer = async () => {
     const dbTest = await db.query('SELECT NOW()');
     console.log(`PostgreSQL Pool connected successfully at ${dbTest.rows[0].now}`);
 
-    server.listen(PORT, () => {
-      console.log(`QLix Backend Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`QLix Backend Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT} (Bound to 0.0.0.0 - Accessible on any IP)`);
     });
   } catch (error) {
     console.error('Fatal: Database connection failed. Server not started.', error.message);

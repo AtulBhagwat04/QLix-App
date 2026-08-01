@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
@@ -20,22 +19,62 @@ class ParticipantWorkspaceScreen extends StatefulWidget {
   const ParticipantWorkspaceScreen({super.key, required this.accessCode});
 
   @override
-  State<ParticipantWorkspaceScreen> createState() => _ParticipantWorkspaceScreenState();
+  State<ParticipantWorkspaceScreen> createState() =>
+      _ParticipantWorkspaceScreenState();
 }
 
-class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen> with TickerProviderStateMixin {
+class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
+    with TickerProviderStateMixin {
   late TabController _tabController;
   final _socketClient = sl<SocketClient>();
   final _cacheManager = sl<CacheManager>();
 
   Map<String, dynamic>? _participant;
   Map<String, dynamic>? _session;
-  
-  // Real-time elements
-  Map<String, dynamic>? _activePoll;
+
+  // Real-time active polls list & category filtering
+  List<Map<String, dynamic>> _activePolls = [];
+  String _selectedCategoryFilter = 'ALL';
+  bool _showAnsweredPolls = false;
+  final Set<String> _fetchingResultsPollIds = {};
+
+  List<String> get _availableCategories {
+    final types = <String>{'ALL'};
+    for (var p in _activePolls) {
+      final t = (p['type'] ?? 'multiple_choice').toString().toUpperCase();
+      types.add(t);
+    }
+    return types.toList();
+  }
+
+  List<Map<String, dynamic>> get _filteredActivePolls {
+    List<Map<String, dynamic>> list;
+    if (_selectedCategoryFilter == 'ALL') {
+      list = List<Map<String, dynamic>>.from(_activePolls);
+    } else {
+      list = _activePolls.where((p) {
+        final t = (p['type'] ?? 'multiple_choice').toString().toUpperCase();
+        return t == _selectedCategoryFilter;
+      }).toList();
+    }
+
+    // Unanswered polls first, answered polls last
+    list.sort((a, b) {
+      final aId = (a['id'] ?? '').toString();
+      final bId = (b['id'] ?? '').toString();
+      final aVoted = _votedPollIds.contains(aId);
+      final bVoted = _votedPollIds.contains(bId);
+
+      if (aVoted == bVoted) return 0;
+      return aVoted ? 1 : -1;
+    });
+
+    return list;
+  }
+
   List<Map<String, dynamic>> _questions = [];
-  List<Map<String, dynamic>> _announcements = [];
-  
+  final List<Map<String, dynamic>> _announcements = [];
+
   // Optimistic UI tracking
   final Set<String> _votedPollIds = {};
 
@@ -48,11 +87,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   final _questionInputCtrl = TextEditingController();
   bool _qaAnonymous = true;
 
-  // Active Poll inputs
-  List<String> _selectedOptionIds = []; // For MC
-  final _textResponseCtrl = TextEditingController(); // For Word Cloud / Open Text
-  double _ratingValue = 3.0; // For Rating
-  List<Map<String, dynamic>> _rankingOptions = []; // For Ranking reordering
+  // Per-poll input state maps
+  final Map<String, Set<String>> _selectedOptionIdsMap = {};
+  final Map<String, TextEditingController> _textResponseCtrlsMap = {};
+  final Map<String, double> _ratingValuesMap = {};
+  final Map<String, List<Map<String, dynamic>>> _rankingOptionsMap = {};
 
   // Sockets streams
   StreamSubscription? _activationSub;
@@ -74,8 +113,10 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   void dispose() {
     _tabController.dispose();
     _questionInputCtrl.dispose();
-    _textResponseCtrl.dispose();
-    
+    for (var ctrl in _textResponseCtrlsMap.values) {
+      ctrl.dispose();
+    }
+
     _activationSub?.cancel();
     _votesSub?.cancel();
     _qaSub?.cancel();
@@ -88,98 +129,145 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
   Future<void> _initializeWorkspace() async {
     final cached = _cacheManager.getSessionParticipant(widget.accessCode);
-    if (cached == null) {
-      context.go('/');
-      return;
-    }
+    final participantName = cached != null
+        ? (cached['name']?.toString() ?? 'Guest')
+        : 'Guest';
 
     try {
       final details = await sl<SessionRepository>().joinSessionByCode(
         widget.accessCode,
         _cacheManager.getDeviceId() ?? '',
-        cached['name'] as String?,
+        participantName,
         true,
       );
 
+      final cachedVoted = _cacheManager.getVotedPollIds(widget.accessCode);
+      final serverVoted = (details['votedPollIds'] as List? ?? [])
+          .map((id) => id.toString())
+          .toList();
+
+      if (!mounted) return;
+
       setState(() {
-        _session = details['session'] as Map<String, dynamic>;
-        _participant = details['participant'] as Map<String, dynamic>;
+        _session = Map<String, dynamic>.from(
+          (details['session'] as Map?) ?? {},
+        );
+        _participant = Map<String, dynamic>.from(
+          (details['participant'] as Map?) ?? {},
+        );
+        _votedPollIds.addAll(cachedVoted);
+        _votedPollIds.addAll(serverVoted);
       });
 
-      final sessionId = _session!['id'] as String;
+      final sessionId = (_session?['id'] ?? '').toString();
+      final participantId = (_participant?['id'] ?? '').toString();
 
       // Load initial questions list
-      final questions = await sl<QaRepository>().getSessionQuestions(sessionId, participantId: _participant!['id'] as String);
-      setState(() {
-        _questions = questions;
-      });
-
-      // Load active poll details if active
-      if (_session!['active_poll_id'] != null) {
-        final poll = await sl<PollRepository>().getPollResults(_session!['active_poll_id'] as String);
+      if (sessionId.isNotEmpty && participantId.isNotEmpty) {
+        final questions = await sl<QaRepository>().getSessionQuestions(
+          sessionId,
+          participantId: participantId,
+        );
+        if (!mounted) return;
         setState(() {
-          _activePoll = poll;
-          if (poll['type'] == 'ranking') {
-            _rankingOptions = List<Map<String, dynamic>>.from(poll['options'] as List);
-          }
+          _questions = questions;
         });
+      }
+
+      // Load active session polls list
+      if (sessionId.isNotEmpty) {
+        try {
+          final sessionPolls = await sl<PollRepository>().getSessionPolls(
+            sessionId,
+          );
+          final activeList = sessionPolls
+              .where((p) => (p['status'] ?? '').toString() == 'active')
+              .toList();
+          if (!mounted) return;
+          setState(() {
+            _activePolls = activeList;
+          });
+        } catch (_) {}
       }
 
       // Connect to websocket room
       _socketClient.connect();
-      _socketClient.joinSession(widget.accessCode, _participant!['id'] as String, 'participant');
+      _socketClient.joinSession(
+        widget.accessCode,
+        participantId,
+        'participant',
+      );
 
       // Bind WebSockets Streams
       _activationSub = _socketClient.pollActivationStream.listen((data) {
+        if (!mounted) return;
+        if (data == null || data['poll'] == null) return;
+        final poll = Map<String, dynamic>.from((data['poll'] as Map?) ?? {});
+        final pollId = (poll['id'] ?? '').toString();
+        if (pollId.isEmpty) return;
+
         setState(() {
-          if (data == null) {
-            _activePoll = null;
+          final idx = _activePolls.indexWhere(
+            (p) => (p['id'] ?? '').toString() == pollId,
+          );
+          if (idx != -1) {
+            _activePolls[idx] = poll;
           } else {
-            _activePoll = Map<String, dynamic>.from(data['poll'] as Map);
-            _selectedOptionIds.clear();
-            _textResponseCtrl.clear();
-            _ratingValue = 3.0;
-            if (_activePoll!['type'] == 'ranking') {
-              _rankingOptions = List<Map<String, dynamic>>.from(_activePoll!['options'] as List);
-            }
+            _activePolls.insert(0, poll);
           }
         });
       });
 
       _votesSub = _socketClient.votesUpdatedStream.listen((data) {
-        final pollId = data['pollId'] as String;
-        if (_activePoll != null && _activePoll!['id'] == pollId) {
-          setState(() {
-            _activePoll!['results'] = data['results'];
-          });
-        }
+        final pollId = (data['pollId'] ?? '').toString();
+        if (!mounted) return;
+        setState(() {
+          for (var p in _activePolls) {
+            if ((p['id'] ?? '').toString() == pollId) {
+              p['results'] = data['results'];
+            }
+          }
+        });
       });
 
       _qaSub = _socketClient.questionCreatedStream.listen((data) {
-        final newQ = Map<String, dynamic>.from(data['question'] as Map);
+        if (data['question'] == null) return;
+        final newQ = Map<String, dynamic>.from(
+          (data['question'] as Map?) ?? {},
+        );
+        if (!mounted) return;
         setState(() {
-          // Remove corresponding optimistic question first
-          _questions.removeWhere((q) => 
-            q['isOptimistic'] == true && 
-            q['text'] == newQ['text'] && 
-            q['participantId'] == newQ['participantId']
+          _questions.removeWhere(
+            (q) =>
+                q['isOptimistic'] == true &&
+                q['text'] == newQ['text'] &&
+                q['participantId'] == newQ['participantId'],
           );
 
-          final isMine = newQ['participantId'] == _participant!['id'];
+          final isMine =
+              newQ['participantId'] == _participant?['id']?.toString();
           final isApproved = newQ['status'] == 'approved';
-          
-          if ((isApproved || isMine) && !_questions.any((q) => q['id'] == newQ['id'])) {
+
+          if ((isApproved || isMine) &&
+              !_questions.any((q) => q['id'] == newQ['id'])) {
             _questions.insert(0, newQ);
           }
         });
       });
 
       _qaStatusSub = _socketClient.questionStatusStream.listen((data) {
-        final updatedQ = Map<String, dynamic>.from(data['question'] as Map);
+        if (data['question'] == null) return;
+        final updatedQ = Map<String, dynamic>.from(
+          (data['question'] as Map?) ?? {},
+        );
+        if (!mounted) return;
         setState(() {
           final index = _questions.indexWhere((q) => q['id'] == updatedQ['id']);
-          final isMine = updatedQ['participantId'] == _participant!['id'];
-          final isApproved = updatedQ['status'] == 'approved' || updatedQ['status'] == 'answered';
+          final isMine =
+              updatedQ['participantId'] == _participant?['id']?.toString();
+          final isApproved =
+              updatedQ['status'] == 'approved' ||
+              updatedQ['status'] == 'answered';
 
           if (index != -1) {
             if (isApproved || isMine) {
@@ -194,8 +282,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       });
 
       _qaUpvotedSub = _socketClient.questionUpvotedStream.listen((data) {
-        final qId = data['questionId'] as String;
-        final count = data['upvotesCount'] as int? ?? 0;
+        final qId = (data['questionId'] ?? '').toString();
+        final count = (data['upvotesCount'] as num?)?.toInt() ?? 0;
+        if (!mounted) return;
         setState(() {
           for (var q in _questions) {
             if (q['id'] == qId) {
@@ -206,25 +295,32 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       });
 
       _quizSub = _socketClient.quizTimerStream.listen((data) {
-        final event = data['event'] as String;
-        final pollId = data['pollId'] as String;
+        final event = (data['event'] ?? '').toString();
+        final pollId = (data['pollId'] ?? '').toString();
+
+        if (!mounted) return;
 
         if (event == 'start') {
           setState(() {
             _activeQuiz = {'id': pollId};
-            _quizTimeRemaining = data['durationSeconds'] as int;
+            _quizTimeRemaining =
+                (data['durationSeconds'] as num?)?.toInt() ?? 15;
             _hasAnsweredQuiz = false;
           });
-          sl<PollRepository>().getPollResults(pollId).then((details) {
-            setState(() {
-              _activeQuiz = details;
-            });
-          }).catchError((e) {
-            // fail gracefully
-          });
+          sl<PollRepository>()
+              .getPollResults(pollId)
+              .then((details) {
+                if (!mounted) return;
+                setState(() {
+                  _activeQuiz = details;
+                });
+              })
+              .catchError((e) {
+                // fail gracefully
+              });
         } else if (event == 'tick') {
           setState(() {
-            _quizTimeRemaining = data['remaining'] as int;
+            _quizTimeRemaining = (data['remaining'] as num?)?.toInt() ?? 0;
           });
         } else if (event == 'end') {
           setState(() {
@@ -235,28 +331,36 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       });
 
       _announcementSub = _socketClient.announcementStream.listen((data) {
-        final alert = Map<String, dynamic>.from(data['announcement'] as Map);
+        if (data['announcement'] == null) return;
+        final alert = Map<String, dynamic>.from(
+          (data['announcement'] as Map?) ?? {},
+        );
+        if (!mounted) return;
         setState(() {
           _announcements.insert(0, alert);
         });
-        _showAnnouncementDialog(alert['title'] as String, alert['message'] as String);
+        _showAnnouncementDialog(
+          (alert['title'] ?? 'Alert').toString(),
+          (alert['message'] ?? '').toString(),
+        );
       });
 
       _socketClient.reactionStream.listen((data) {
-        final emoji = data['emoji'] as String;
+        final emoji = (data['emoji'] ?? '').toString();
         _triggerLocalReaction(emoji);
       });
-
     } catch (e) {
       if (mounted) {
-        final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('DioException [bad response]: ', '');
+        final errorMsg = e
+            .toString()
+            .replaceAll('Exception: ', '')
+            .replaceAll('DioException [bad response]: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to initialize session: $errorMsg'),
             backgroundColor: AppColors.error,
           ),
         );
-        context.go('/');
       }
     }
   }
@@ -266,7 +370,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       context: context,
       builder: (context) {
         return AlertDialog(
-          icon: const Icon(Icons.campaign_rounded, color: AppColors.primary, size: AppSizes.iconLarge),
+          icon: const Icon(
+            Icons.campaign_rounded,
+            color: AppColors.primary,
+            size: AppSizes.iconLarge,
+          ),
           title: Text(title, textAlign: TextAlign.center),
           content: Text(message, textAlign: TextAlign.center),
           actions: [
@@ -280,137 +388,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     );
   }
 
-  void _calculateOptimisticResults() {
-    if (_activePoll == null) return;
-    final type = _activePoll!['type'] as String;
-    
-    final Map<String, dynamic> results = Map<String, dynamic>.from(_activePoll!['results'] ?? {});
-    
-    if (type == 'multiple_choice') {
-      final options = List<Map<String, dynamic>>.from(results['options'] ?? _activePoll!['options']?.map((o) => {
-        'id': o['id'],
-        'optionText': o['optionText'],
-        'isCorrect': o['isCorrect'] ?? false,
-        'votes': 0,
-        'percentage': 0,
-      })?.toList() ?? []);
-
-      int totalVotes = results['totalVotes'] as int? ?? 0;
-      totalVotes += 1;
-
-      for (var opt in options) {
-        if (_selectedOptionIds.contains(opt['id'])) {
-          opt['votes'] = (opt['votes'] as int? ?? 0) + 1;
-        }
-      }
-
-      for (var opt in options) {
-        opt['percentage'] = totalVotes > 0 ? (((opt['votes'] as int) / totalVotes) * 100).round() : 0;
-      }
-
-      results['totalVotes'] = totalVotes;
-      results['options'] = options;
-    } else if (type == 'rating') {
-      int totalVotes = results['totalVotes'] as int? ?? 0;
-      double average = (results['average'] as num?)?.toDouble() ?? 0.0;
-      final int val = _ratingValue.round();
-
-      final newTotal = totalVotes + 1;
-      final newAverage = ((average * totalVotes) + val) / newTotal;
-
-      results['totalVotes'] = newTotal;
-      results['average'] = newAverage;
-    } else if (type == 'word_cloud') {
-      int totalVotes = results['totalVotes'] as int? ?? 0;
-      final words = List<Map<String, dynamic>>.from(results['words'] ?? []);
-      final word = _textResponseCtrl.text.trim().toLowerCase();
-
-      if (word.isNotEmpty) {
-        totalVotes += 1;
-        final idx = words.indexWhere((w) => w['text'] == word);
-        if (idx != -1) {
-          words[idx]['value'] = (words[idx]['value'] as int) + 1;
-        } else {
-          words.add({'text': word, 'value': 1});
-        }
-      }
-      results['totalVotes'] = totalVotes;
-      results['words'] = words..sort((a, b) => (b['value'] as int) - (a['value'] as int));
-    } else if (type == 'open_text') {
-      int totalVotes = results['totalVotes'] as int? ?? 0;
-      final responses = List<Map<String, dynamic>>.from(results['responses'] ?? []);
-      final text = _textResponseCtrl.text.trim();
-
-      if (text.isNotEmpty) {
-        totalVotes += 1;
-        responses.insert(0, {
-          'id': 'temp-vote',
-          'text': text,
-          'author': _participant!['name'] as String? ?? 'Anonymous',
-          'createdAt': DateTime.now().toIso8601String(),
-        });
-      }
-      results['totalVotes'] = totalVotes;
-      results['responses'] = responses;
-    } else if (type == 'ranking') {
-      int totalVotes = results['totalVotes'] as int? ?? 0;
-      totalVotes += 1;
-      
-      final options = List<Map<String, dynamic>>.from(results['options'] ?? _activePoll!['options']?.map((o) => {
-        'id': o['id'],
-        'optionText': o['optionText'],
-        'score': 0,
-        'votes': 0,
-      })?.toList() ?? []);
-
-      final n = options.length;
-      final rankedIds = _rankingOptions.map((o) => o['id'] as String).toList();
-
-      for (var opt in options) {
-        final rank = rankedIds.indexOf(opt['id'] as String);
-        if (rank != -1) {
-          opt['score'] = (opt['score'] as int) + (n - rank);
-          opt['votes'] = (opt['votes'] as int) + 1;
-        }
-      }
-
-      results['totalVotes'] = totalVotes;
-      results['options'] = options..sort((a, b) => (b['score'] as int) - (a['score'] as int));
-    }
-
-    setState(() {
-      _activePoll!['results'] = results;
-    });
-  }
-
-  void _submitVote() {
-    if (_activePoll == null || _participant == null) return;
-    
-    final pollId = _activePoll!['id'] as String;
-
-    // Apply Optimistic updates locally immediately!
-    setState(() {
-      _votedPollIds.add(pollId);
-    });
-    _calculateOptimisticResults();
-
-    _socketClient.submitVote(
-      pollId: pollId,
-      participantId: _participant!['id'] as String,
-      optionIds: _selectedOptionIds,
-      textResponse: _textResponseCtrl.text,
-      ratingValue: _ratingValue.round(),
-      rankingIds: _rankingOptions.map((o) => o['id'] as String).toList(),
-    );
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(AppStrings.successVoteSubmit),
-        backgroundColor: AppColors.success,
-      ),
-    );
-  }
-
   void _submitQuestion() {
     final text = _questionInputCtrl.text.trim();
     if (text.isEmpty || _session == null || _participant == null) return;
@@ -419,14 +396,16 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
     final tempQ = {
       'id': tempId,
-      'sessionId': _session!['id'] as String,
-      'participantId': _participant!['id'] as String,
+      'sessionId': (_session?['id'] ?? '').toString(),
+      'participantId': (_participant?['id'] ?? '').toString(),
       'text': text,
       'isAnonymous': _qaAnonymous,
       'status': 'pending',
       'upvotesCount': 0,
       'isPinned': false,
-      'authorName': _qaAnonymous ? 'Anonymous' : (_participant!['name'] as String? ?? 'Guest'),
+      'authorName': _qaAnonymous
+          ? 'Anonymous'
+          : (_participant?['name']?.toString() ?? 'Guest'),
       'createdAt': DateTime.now().toIso8601String(),
       'isOptimistic': true, // visual loader tag
     };
@@ -436,14 +415,14 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     });
 
     _socketClient.submitQuestion(
-      sessionId: _session!['id'] as String,
-      participantId: _participant!['id'] as String,
+      sessionId: (_session?['id'] ?? '').toString(),
+      participantId: (_participant?['id'] ?? '').toString(),
       text: text,
       isAnonymous: _qaAnonymous,
     );
 
     _questionInputCtrl.clear();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Question submitted instantly!'),
@@ -459,52 +438,60 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       for (var q in _questions) {
         if (q['id'] == questionId) {
           q['hasUpvoted'] = !currentHasUpvoted;
-          q['upvotesCount'] = (q['upvotesCount'] as int) + (currentHasUpvoted ? -1 : 1);
+          q['upvotesCount'] =
+              (q['upvotesCount'] as int) + (currentHasUpvoted ? -1 : 1);
         }
       }
     });
 
     _socketClient.upvoteQuestion(
-      sessionId: _session!['id'] as String,
+      sessionId: (_session?['id'] ?? '').toString(),
       questionId: questionId,
-      participantId: _participant!['id'] as String,
+      participantId: (_participant?['id'] ?? '').toString(),
     );
   }
 
   void _submitQuizAnswer(String optionId) {
     if (_activeQuiz == null || _participant == null) return;
-    
+
     setState(() {
       _hasAnsweredQuiz = true;
     });
 
     final messenger = ScaffoldMessenger.of(context);
 
-    sl<QuizRepository>().submitQuizAnswer(
-      _session!['id'] as String,
-      _participant!['id'] as String,
-      _activeQuiz!['id'] as String,
-      optionId,
-    ).then((res) {
-      final isCorrect = res['isCorrect'] as bool;
-      final points = res['pointsEarned'] as int;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(isCorrect ? 'CORRECT! Earned $points pts!' : 'WRONG ANSWER! 0 pts.'),
-          backgroundColor: isCorrect ? AppColors.success : AppColors.error,
-        ),
-      );
-    }).catchError((e) {
-      setState(() {
-        _hasAnsweredQuiz = false;
-      });
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit answer: $e'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    });
+    sl<QuizRepository>()
+        .submitQuizAnswer(
+          (_session?['id'] ?? '').toString(),
+          (_participant?['id'] ?? '').toString(),
+          (_activeQuiz?['id'] ?? '').toString(),
+          optionId,
+        )
+        .then((res) {
+          final isCorrect = res['isCorrect'] as bool;
+          final points = res['pointsEarned'] as int;
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                isCorrect
+                    ? 'CORRECT! Earned $points pts!'
+                    : 'WRONG ANSWER! 0 pts.',
+              ),
+              backgroundColor: isCorrect ? AppColors.success : AppColors.error,
+            ),
+          );
+        })
+        .catchError((e) {
+          setState(() {
+            _hasAnsweredQuiz = false;
+          });
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Failed to submit answer: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        });
   }
 
   void _sendReaction(String emoji) {
@@ -519,7 +506,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   @override
   Widget build(BuildContext context) {
     if (_session == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: AppColors.primary)));
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -531,13 +522,30 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_session!['title'] as String, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                Text(AppStrings.participantTitle, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isDark ? Colors.white38 : Colors.black38)),
+                Text(
+                  (_session!['title'] ?? 'Session').toString(),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                Text(
+                  AppStrings.participantTitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
               ],
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.exit_to_app_rounded, color: AppColors.error),
+                icon: const Icon(
+                  Icons.exit_to_app_rounded,
+                  color: AppColors.error,
+                ),
                 tooltip: 'Leave Room',
                 onPressed: () {
                   _socketClient.disconnect();
@@ -553,17 +561,20 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               labelStyle: const TextStyle(fontWeight: FontWeight.bold),
               unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
               tabs: const [
-                Tab(icon: Icon(Icons.poll_rounded), text: AppStrings.livePollsTab),
-                Tab(icon: Icon(Icons.question_answer_rounded), text: AppStrings.qaTab),
+                Tab(
+                  icon: Icon(Icons.poll_rounded),
+                  text: AppStrings.livePollsTab,
+                ),
+                Tab(
+                  icon: Icon(Icons.question_answer_rounded),
+                  text: AppStrings.qaTab,
+                ),
               ],
             ),
           ),
           body: TabBarView(
             controller: _tabController,
-            children: [
-              _buildPollsTabView(),
-              _buildQaTabView(),
-            ],
+            children: [_buildPollsTabView(), _buildQaTabView()],
           ),
           bottomNavigationBar: _buildReactionTool(),
         ),
@@ -616,21 +627,32 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (_activePoll == null) {
+    if (_activePolls.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.wifi_tethering_off_rounded, size: 72, color: isDark ? Colors.white24 : Colors.black12),
+              Icon(
+                Icons.wifi_tethering_off_rounded,
+                size: 72,
+                color: isDark ? Colors.white24 : Colors.black12,
+              ),
               const SizedBox(height: AppSizes.space16),
-              const Text(AppStrings.noActivePoll, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                AppStrings.noActivePoll,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: AppSizes.space8),
               Text(
-                AppStrings.noActivePollSub, 
+                AppStrings.noActivePollSub,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                ),
               ),
             ],
           ),
@@ -638,136 +660,370 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       );
     }
 
-    final pollId = _activePoll!['id'] as String;
+    final filteredList = _filteredActivePolls;
+    final unansweredPolls = filteredList
+        .where((p) => !_votedPollIds.contains((p['id'] ?? '').toString()))
+        .toList();
+    final answeredPolls = filteredList
+        .where((p) => _votedPollIds.contains((p['id'] ?? '').toString()))
+        .toList();
 
-    // IF user has voted
-    if (_votedPollIds.contains(pollId)) {
-      return _buildPollResultsView();
-    }
-
-    final type = _activePoll!['type'] as String;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.space24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            type.replaceAll('_', ' ').toUpperCase(),
-            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5),
-          ),
-          const SizedBox(height: AppSizes.space8),
-          Text(
-            _activePoll!['title'] as String,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4),
-          ),
-          const SizedBox(height: AppSizes.space24),
-
-          _buildPollForm(type),
-          
-          const SizedBox(height: AppSizes.space32),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppSizes.radiusButton),
-              gradient: const LinearGradient(colors: AppColors.primaryGradient),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.25),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+    return Column(
+      children: [
+        const SizedBox(height: AppSizes.space12),
+        _buildCategoryFilterHeader(isDark),
+        Expanded(
+          child: filteredList.isEmpty
+              ? Center(
+                  child: Text(
+                    'No active polls in this category.',
+                    style: TextStyle(
+                      color: isDark ? Colors.white54 : Colors.black54,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 )
-              ]
-            ),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: AppSizes.space16),
+              : ListView(
+                  padding: const EdgeInsets.all(AppSizes.space16),
+                  children: [
+                    // Unanswered polls list first
+                    ...unansweredPolls.map(
+                      (poll) => _buildSingleActivePollCard(poll, isDark),
+                    ),
+
+                    // Answered polls wrapped in a collapsible expandable section
+                    if (answeredPolls.isNotEmpty) ...[
+                      const SizedBox(height: AppSizes.space8),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showAnsweredPolls = !_showAnsweredPolls;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(
+                          AppSizes.radiusCard,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.04)
+                                : Colors.black.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(
+                              AppSizes.radiusCard,
+                            ),
+                            border: Border.all(
+                              color: isDark ? Colors.white12 : Colors.black12,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 18,
+                                    color: AppColors.success,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Answered Polls (${answeredPolls.length})',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: isDark
+                                          ? Colors.white70
+                                          : AppColors.textPrimaryLight,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    _showAnsweredPolls ? 'Hide' : 'Show',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    _showAnsweredPolls
+                                        ? Icons.keyboard_arrow_up_rounded
+                                        : Icons.keyboard_arrow_down_rounded,
+                                    color: AppColors.primary,
+                                    size: 20,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_showAnsweredPolls) ...[
+                        const SizedBox(height: AppSizes.space16),
+                        ...answeredPolls.map(
+                          (poll) => _buildSingleActivePollCard(poll, isDark),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryFilterHeader(bool isDark) {
+    final categories = _availableCategories;
+    if (categories.length <= 1) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: categories.map((cat) {
+            final isSelected = _selectedCategoryFilter == cat;
+            final label = cat == 'ALL' ? 'All Polls' : cat.replaceAll('_', ' ');
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                selected: isSelected,
+                showCheckmark: false,
+                label: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: 12,
+                    letterSpacing: 0.2,
+                    color: isSelected
+                        ? Colors.white
+                        : (isDark ? Colors.white70 : Colors.black87),
+                  ),
+                ),
+                selectedColor: AppColors.primary,
+                backgroundColor: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.04),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                side: BorderSide(
+                  color: isSelected
+                      ? AppColors.primary
+                      : (isDark ? Colors.white12 : Colors.black12),
+                ),
+                onSelected: (val) {
+                  if (val) {
+                    setState(() {
+                      _selectedCategoryFilter = cat;
+                    });
+                  }
+                },
               ),
-              onPressed: _submitVote,
-              child: const Text(AppStrings.submitResponse, style: AppTextStyles.buttonText),
-            ),
-          ),
-        ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 
-  Widget _buildPollResultsView() {
-    final type = _activePoll!['type'] as String;
-    final results = _activePoll!['results'] as Map<String, dynamic>?;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildSingleActivePollCard(Map<String, dynamic> poll, bool isDark) {
+    final pollId = (poll['id'] ?? '').toString();
+    final title = (poll['title'] ?? 'Live Poll').toString();
+    final hasVoted = _votedPollIds.contains(pollId);
 
-    if (results == null) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppColors.primary),
-            SizedBox(height: AppSizes.space16),
-            Text('Calculating results...', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSizes.space20),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.035) : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: hasVoted
+              ? AppColors.success.withValues(alpha: 0.3)
+              : (isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.black.withValues(alpha: 0.08)),
+          width: hasVoted ? 1.5 : 1.0,
         ),
-      );
-    }
-
-    final totalVotes = results['totalVotes'] as int? ?? 0;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.space24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.3)
+                : AppColors.primary.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.success),
-              ),
-              const SizedBox(width: 8),
+              // Header Tag Bar
+              if (hasVoted)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppColors.success.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 13,
+                            color: AppColors.success,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            'ANSWERED',
+                            style: TextStyle(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              if (hasVoted) const SizedBox(height: 12),
+
+              // Question Title
               Text(
-                'LIVE RESULTS: ${type.replaceAll('_', ' ').toUpperCase()}',
-                style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.5),
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  height: 1.3,
+                  letterSpacing: -0.3,
+                  color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                ),
               ),
+              const SizedBox(height: 20),
+
+              // Card Content
+              if (hasVoted) ...[
+                _buildPollResultsViewForPoll(poll),
+              ] else ...[
+                _buildPollFormForPoll(poll),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    gradient: const LinearGradient(
+                      colors: AppColors.primaryGradient,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () => _submitVoteForPoll(poll),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Submit Response',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: AppSizes.space8),
-          Text(
-            _activePoll!['title'] as String,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4),
-          ),
-          const SizedBox(height: AppSizes.space24),
-          
-          _buildResultsChart(type, results),
-          
-          const SizedBox(height: AppSizes.space36),
-          Text(
-            'Total Responses: $totalVotes',
-            style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight, fontSize: 13, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
-        ],
+        ),
       ),
     );
   }
+
+
 
   Widget _buildResultsChart(String type, Map<String, dynamic> results) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     switch (type) {
       case 'multiple_choice':
         final options = results['options'] as List? ?? [];
+        int maxVotes = 0;
+        for (var opt in options) {
+          final v = opt['votes'] as int? ?? 0;
+          if (v > maxVotes) maxVotes = v;
+        }
+
         return Column(
           children: options.map((opt) {
             final text = opt['optionText'] as String? ?? '';
             final percentage = opt['percentage'] as int? ?? 0;
             final votes = opt['votes'] as int? ?? 0;
-            final id = opt['id'] as String;
-            final isSelected = _selectedOptionIds.contains(id);
+            final isLeading = votes == maxVotes && maxVotes > 0;
 
             return Container(
-              margin: const EdgeInsets.only(bottom: AppSizes.space16),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isLeading
+                    ? AppColors.primary.withValues(alpha: isDark ? 0.08 : 0.04)
+                    : (isDark
+                          ? Colors.white.withValues(alpha: 0.02)
+                          : Colors.black.withValues(alpha: 0.02)),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isLeading
+                      ? AppColors.primary.withValues(alpha: 0.3)
+                      : Colors.transparent,
+                ),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -778,30 +1034,42 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                         child: Text(
                           text,
                           style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: isSelected ? AppColors.primary : (isDark ? Colors.white70 : AppColors.textPrimaryLight),
+                            fontWeight: isLeading
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            fontSize: 14,
+                            color: isDark
+                                ? Colors.white
+                                : AppColors.textPrimaryLight,
                           ),
                         ),
                       ),
                       Text(
                         '$percentage% ($votes)',
                         style: TextStyle(
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? AppColors.primary : (isDark ? Colors.white60 : Colors.black54),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          color: isLeading
+                              ? AppColors.primary
+                              : (isDark ? Colors.white60 : Colors.black54),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSizes.space8),
+                  const SizedBox(height: 8),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusSmall),
+                    borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
                       value: percentage / 100,
-                      backgroundColor: isDark ? Colors.white10 : Colors.black.withOpacity(0.04),
+                      backgroundColor: isDark
+                          ? Colors.white10
+                          : Colors.black.withValues(alpha: 0.06),
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        isSelected ? AppColors.primary : AppColors.primary.withOpacity(0.4),
+                        isLeading
+                            ? AppColors.primary
+                            : AppColors.primary.withValues(alpha: 0.45),
                       ),
-                      minHeight: AppSizes.barHeight * 2.5,
+                      minHeight: 10,
                     ),
                   ),
                 ],
@@ -816,7 +1084,12 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           children: [
             Text(
               '${average.toStringAsFixed(1)} / 5 Stars',
-              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: -0.5),
+              style: const TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w900,
+                color: AppColors.primary,
+                letterSpacing: -0.5,
+              ),
             ),
             const SizedBox(height: AppSizes.space12),
             Row(
@@ -824,7 +1097,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               children: List.generate(5, (index) {
                 final starVal = index + 1;
                 return Icon(
-                  starVal <= average.round() ? Icons.star_rounded : Icons.star_border_rounded,
+                  starVal <= average.round()
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
                   color: Colors.amber,
                   size: 40,
                 );
@@ -836,7 +1111,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       case 'word_cloud':
         final words = results['words'] as List? ?? [];
         if (words.isEmpty) {
-          return const Text('No responses yet.', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold), textAlign: TextAlign.center);
+          return const Text(
+            'No responses yet.',
+            style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          );
         }
         return Wrap(
           spacing: AppSizes.space8,
@@ -847,12 +1126,18 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             final val = w['value'] as int? ?? 1;
             final size = 12.0 + (val * 2.0).clamp(0, 18);
             return Chip(
-              backgroundColor: AppColors.primary.withOpacity(0.12),
-              side: BorderSide(color: AppColors.primary.withOpacity(0.2)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusBadge)),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+              side: BorderSide(color: AppColors.primary.withValues(alpha: 0.2)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusBadge),
+              ),
               label: Text(
                 '$text ($val)',
-                style: TextStyle(fontSize: size, color: isDark ? Colors.white : AppColors.textPrimaryLight, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: size,
+                  color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             );
           }).toList(),
@@ -861,7 +1146,16 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       case 'open_text':
         final responses = results['responses'] as List? ?? [];
         if (responses.isEmpty) {
-          return Text('No responses yet.', style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight, fontWeight: FontWeight.bold), textAlign: TextAlign.center);
+          return Text(
+            'No responses yet.',
+            style: TextStyle(
+              color: isDark
+                  ? AppColors.textSecondaryDark
+                  : AppColors.textSecondaryLight,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          );
         }
         return Column(
           children: responses.map((r) {
@@ -870,10 +1164,20 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             return Card(
               margin: const EdgeInsets.only(bottom: AppSizes.space12),
               child: ListTile(
-                title: Text(text, style: const TextStyle(fontWeight: FontWeight.w500)),
+                title: Text(
+                  text,
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text('By $author', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey)),
+                  child: Text(
+                    'By $author',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
                 ),
               ),
             );
@@ -891,11 +1195,28 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               margin: const EdgeInsets.only(bottom: AppSizes.space12),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
-                  child: Text('${idx + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                  child: Text(
+                    '${idx + 1}',
+                    style: const TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
-                title: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)),
-                trailing: Text('$score pts', style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight, fontWeight: FontWeight.w600)),
+                title: Text(
+                  text,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                trailing: Text(
+                  '$score pts',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             );
           }),
@@ -918,9 +1239,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     Widget timerWidget = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: timeColor.withOpacity(0.12),
+        color: timeColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-        border: Border.all(color: timeColor.withOpacity(0.3), width: 1.0),
+        border: Border.all(color: timeColor.withValues(alpha: 0.3), width: 1.0),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -928,8 +1249,12 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           Icon(Icons.timer_outlined, size: 14, color: timeColor),
           const SizedBox(width: 6),
           Text(
-            '$_quizTimeRemaining s', 
-            style: TextStyle(color: timeColor, fontWeight: FontWeight.bold, fontSize: 13),
+            '$_quizTimeRemaining s',
+            style: TextStyle(
+              color: timeColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           ),
         ],
       ),
@@ -937,65 +1262,107 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
     return Container(
       padding: const EdgeInsets.all(AppSizes.space24),
-      color: AppColors.primary.withOpacity(0.02),
+      color: AppColors.primary.withValues(alpha: 0.02),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(AppStrings.quizTitle, style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5)),
+              const Text(
+                AppStrings.quizTitle,
+                style: TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  letterSpacing: 0.5,
+                ),
+              ),
               timerWidget,
             ],
           ),
           const SizedBox(height: AppSizes.space24),
-          Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.4,
+            ),
+          ),
           const SizedBox(height: AppSizes.space32),
           if (_hasAnsweredQuiz) ...[
             Center(
               child: Column(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 64),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.success,
+                    size: 64,
+                  ),
                   const SizedBox(height: AppSizes.space16),
-                  const Text(AppStrings.answerSubmitted, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text(
+                    AppStrings.answerSubmitted,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    AppStrings.quizWaitResults, 
-                    style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                    AppStrings.quizWaitResults,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
                   ),
                 ],
               ),
             ),
           ] else ...[
             ...options.map((opt) {
-              final id = opt['id'] as String;
+              final id = (opt['id'] ?? '').toString();
               return Container(
                 margin: const EdgeInsets.only(bottom: AppSizes.space16),
                 child: InkWell(
                   onTap: () => _submitQuizAnswer(id),
                   borderRadius: BorderRadius.circular(AppSizes.radiusCard),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                     decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.02),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.03)
+                          : Colors.black.withValues(alpha: 0.02),
                       borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                      border: Border.all(color: isDark ? Colors.white10 : Colors.black12, width: 1.0),
+                      border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.black12,
+                        width: 1.0,
+                      ),
                     ),
                     child: Row(
                       children: [
                         CircleAvatar(
                           radius: 12,
-                          backgroundColor: AppColors.primary.withOpacity(0.15),
-                          child: const Icon(Icons.star_rounded, size: 12, color: AppColors.primary),
+                          backgroundColor: AppColors.primary.withValues(
+                            alpha: 0.15,
+                          ),
+                          child: const Icon(
+                            Icons.star_rounded,
+                            size: 12,
+                            color: AppColors.primary,
+                          ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
-                            opt['optionText'] as String, 
+                            (opt['optionText'] ?? '').toString(),
                             style: TextStyle(
-                              fontSize: 15, 
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                              color: isDark
+                                  ? Colors.white
+                                  : AppColors.textPrimaryLight,
                             ),
                           ),
                         ),
@@ -1011,115 +1378,250 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     );
   }
 
-  Widget _buildPollForm(String type) {
-    final options = _activePoll!['options'] as List? ?? [];
+  Widget _buildPollFormForPoll(Map<String, dynamic> poll) {
+    final pollId = (poll['id'] ?? '').toString();
+    final type = (poll['type'] ?? 'multiple_choice').toString();
+    final options = poll['options'] as List? ?? [];
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     switch (type) {
       case 'multiple_choice':
+        _selectedOptionIdsMap.putIfAbsent(pollId, () => {});
+        final selectedSet = _selectedOptionIdsMap[pollId]!;
+        final letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
         return Column(
-          children: options.map((opt) {
-            final id = opt['id'] as String;
-            final isSelected = _selectedOptionIds.contains(id);
+          children: List.generate(options.length, (idx) {
+            final opt = options[idx];
+            final id = (opt['id'] ?? '').toString();
+            final isSelected = selectedSet.contains(id);
+            final optionLabel = (opt['optionText'] ?? opt['option_text'] ?? '')
+                .toString();
+            final letter = idx < letters.length ? letters[idx] : '${idx + 1}';
+
             return Container(
-              margin: const EdgeInsets.only(bottom: 12),
+              margin: const EdgeInsets.only(bottom: 10),
               child: InkWell(
                 onTap: () {
                   setState(() {
-                    _selectedOptionIds.clear(); // Single-select by default
-                    _selectedOptionIds.add(id);
+                    selectedSet.clear();
+                    selectedSet.add(id);
                   });
                 },
-                borderRadius: BorderRadius.circular(AppSizes.radiusCard),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                borderRadius: BorderRadius.circular(14),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected 
-                        ? AppColors.primary.withOpacity(isDark ? 0.12 : 0.08)
-                        : (isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.02)),
-                    borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+                    color: isSelected
+                        ? AppColors.primary.withValues(
+                            alpha: isDark ? 0.16 : 0.1,
+                          )
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.03)
+                              : Colors.black.withValues(alpha: 0.02)),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: isSelected ? AppColors.primary : Colors.transparent,
-                      width: 2.0,
+                      color: isSelected
+                          ? AppColors.primary
+                          : (isDark ? Colors.white12 : Colors.black12),
+                      width: isSelected ? 2.0 : 1.0,
                     ),
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        isSelected ? Icons.check_circle_rounded : Icons.radio_button_off_rounded,
-                        color: isSelected ? AppColors.primary : Colors.grey,
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isSelected
+                              ? AppColors.primary
+                              : (isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.06)),
+                        ),
+                        child: Center(
+                          child: Text(
+                            letter,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
-                          opt['optionText'] as String,
+                          optionLabel,
                           style: TextStyle(
                             fontSize: 15,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                            color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                            fontWeight: isSelected
+                                ? FontWeight.w800
+                                : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.primary
+                                : (isDark
+                                      ? Colors.white
+                                      : AppColors.textPrimaryLight),
                           ),
                         ),
                       ),
+                      if (isSelected)
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                          size: 22,
+                        ),
                     ],
                   ),
                 ),
               ),
             );
-            }).toList(),
+          }),
         );
 
       case 'word_cloud':
       case 'open_text':
+        _textResponseCtrlsMap.putIfAbsent(
+          pollId,
+          () => TextEditingController(),
+        );
+        final ctrl = _textResponseCtrlsMap[pollId]!;
         return TextField(
-          controller: _textResponseCtrl,
+          controller: ctrl,
           decoration: InputDecoration(
             labelText: AppStrings.wordCloudHint,
             prefixIcon: const Icon(Icons.edit_note_rounded),
-            hintText: type == 'word_cloud' ? 'Enter a single word...' : 'Enter your open thoughts...',
+            hintText: type == 'word_cloud'
+                ? 'Enter a single word...'
+                : 'Enter your open thoughts...',
           ),
           maxLength: type == 'word_cloud' ? 20 : 250,
         );
 
       case 'rating':
+        _ratingValuesMap.putIfAbsent(pollId, () => 3.0);
+        final currentRating = _ratingValuesMap[pollId]!;
+        final ratingLabels = ['Poor', 'Fair', 'Good', 'Great', 'Excellent!'];
+        final rIdx = (currentRating.round() - 1).clamp(0, 4);
+
         return Column(
           children: [
-            Text('${_ratingValue.toInt()} / 5 Stars', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.primary)),
-            const SizedBox(height: AppSizes.space16),
-            Slider(
-              value: _ratingValue,
-              min: 1.0,
-              max: 5.0,
-              divisions: 4,
-              activeColor: AppColors.primary,
-              inactiveColor: AppColors.primary.withOpacity(0.15),
-              onChanged: (val) {
-                setState(() {
-                  _ratingValue = val;
-                });
-              },
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '${currentRating.toInt()} / 5 Stars - ${ratingLabels[rIdx]}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(5, (index) {
+                      final starVal = (index + 1).toDouble();
+                      final isSelected = starVal <= currentRating;
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _ratingValuesMap[pollId] = starVal;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.amber.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            isSelected
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            color: isSelected
+                                ? Colors.amber
+                                : Colors.grey.shade400,
+                            size: 34,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
             ),
           ],
         );
 
       case 'ranking':
+        _rankingOptionsMap.putIfAbsent(
+          pollId,
+          () => List<Map<String, dynamic>>.from(options),
+        );
+        final rankingList = _rankingOptionsMap[pollId]!;
+
         return Column(
           children: [
-            Text(AppStrings.rankingGuide, style: TextStyle(color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight, fontSize: 13, fontWeight: FontWeight.w500)),
-            const SizedBox(height: AppSizes.space16),
+            Text(
+              AppStrings.rankingGuide,
+              style: TextStyle(
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: AppSizes.space12),
             ReorderableListView(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              children: List.generate(_rankingOptions.length, (idx) {
-                final opt = _rankingOptions[idx];
+              children: List.generate(rankingList.length, (idx) {
+                final opt = rankingList[idx];
+                final optionLabel =
+                    (opt['optionText'] ?? opt['option_text'] ?? '').toString();
                 return Card(
-                  key: ValueKey(opt['id']),
+                  key: ValueKey((opt['id'] ?? idx).toString()),
                   margin: const EdgeInsets.only(bottom: AppSizes.space12),
                   child: ListTile(
                     leading: CircleAvatar(
-                      backgroundColor: AppColors.primary.withOpacity(0.15),
-                      child: Text('${idx + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                      backgroundColor: AppColors.primary.withValues(
+                        alpha: 0.15,
+                      ),
+                      child: Text(
+                        '${idx + 1}',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    title: Text(opt['optionText'] as String, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    title: Text(
+                      optionLabel,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     trailing: const Icon(Icons.drag_handle_rounded),
                   ),
                 );
@@ -1127,8 +1629,8 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               onReorder: (oldIdx, newIdx) {
                 setState(() {
                   if (newIdx > oldIdx) newIdx -= 1;
-                  final item = _rankingOptions.removeAt(oldIdx);
-                  _rankingOptions.insert(newIdx, item);
+                  final item = rankingList.removeAt(oldIdx);
+                  rankingList.insert(newIdx, item);
                 });
               },
             ),
@@ -1137,6 +1639,110 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
       default:
         return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildPollResultsViewForPoll(Map<String, dynamic> poll) {
+    final pollId = (poll['id'] ?? '').toString();
+    final type = (poll['type'] ?? 'multiple_choice').toString();
+    final results = poll['results'] as Map<String, dynamic>?;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (results == null) {
+      _fetchPollResults(pollId);
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primary),
+              SizedBox(height: AppSizes.space16),
+              Text(
+                'Loading live results...',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final totalVotes = results['totalVotes'] as int? ?? 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildResultsChart(type, results),
+        const SizedBox(height: AppSizes.space20),
+        Text(
+          'Total Responses: $totalVotes',
+          style: TextStyle(
+            color: isDark
+                ? AppColors.textSecondaryDark
+                : AppColors.textSecondaryLight,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  void _submitVoteForPoll(Map<String, dynamic> poll) {
+    if (_participant == null) return;
+    final pollId = (poll['id'] ?? '').toString();
+    final selectedOptions = (_selectedOptionIdsMap[pollId] ?? {}).toList();
+    final textCtrl = _textResponseCtrlsMap[pollId];
+    final textResponse = textCtrl?.text ?? '';
+    final ratingValue = _ratingValuesMap[pollId] ?? 3.0;
+    final rankingOptions = _rankingOptionsMap[pollId] ?? [];
+
+    setState(() {
+      _votedPollIds.add(pollId);
+    });
+    _cacheManager.saveVotedPollId(widget.accessCode, pollId);
+
+    _socketClient.submitVote(
+      pollId: pollId,
+      participantId: (_participant?['id'] ?? '').toString(),
+      optionIds: selectedOptions,
+      textResponse: textResponse,
+      ratingValue: ratingValue.round(),
+      rankingIds: rankingOptions
+          .map((o) => (o['id'] ?? '').toString())
+          .toList(),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(AppStrings.successVoteSubmit),
+        backgroundColor: AppColors.success,
+      ),
+    );
+  }
+
+  void _fetchPollResults(String pollId) async {
+    if (pollId.isEmpty || _fetchingResultsPollIds.contains(pollId)) return;
+    _fetchingResultsPollIds.add(pollId);
+    try {
+      final res = await sl<PollRepository>().getPollResults(pollId);
+      if (!mounted) return;
+      setState(() {
+        final idx = _activePolls.indexWhere(
+          (p) => (p['id'] ?? '').toString() == pollId,
+        );
+        if (idx != -1) {
+          _activePolls[idx]['results'] = res;
+        }
+      });
+    } catch (_) {
+    } finally {
+      _fetchingResultsPollIds.remove(pollId);
     }
   }
 
@@ -1179,12 +1785,18 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Text(
-                AppStrings.postAnonymously, 
-                style: TextStyle(fontSize: 12, color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight, fontWeight: FontWeight.bold),
+                AppStrings.postAnonymously,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isDark
+                      ? AppColors.textSecondaryDark
+                      : AppColors.textSecondaryLight,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               Switch(
                 value: _qaAnonymous,
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
                 onChanged: (val) {
                   setState(() {
                     _qaAnonymous = val;
@@ -1201,9 +1813,19 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.forum_outlined, size: 48, color: isDark ? Colors.white24 : Colors.black12),
+                      Icon(
+                        Icons.forum_outlined,
+                        size: 48,
+                        color: isDark ? Colors.white24 : Colors.black12,
+                      ),
                       const SizedBox(height: 12),
-                      const Text('No questions asked yet', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                      const Text(
+                        'No questions asked yet',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 )
@@ -1212,9 +1834,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                   itemCount: _questions.length,
                   itemBuilder: (context, index) {
                     final q = _questions[index];
-                    final qId = q['id'] as String;
+                    final qId = (q['id'] ?? '').toString();
                     final author = q['authorName'] as String? ?? 'Anonymous';
-                    final text = q['text'] as String;
+                    final text = (q['text'] ?? '').toString();
                     final upvotes = q['upvotesCount'] as int? ?? 0;
                     final hasUpvoted = q['hasUpvoted'] as bool? ?? false;
                     final isPinned = q['isPinned'] as bool? ?? false;
@@ -1222,34 +1844,57 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                     final isOptimistic = q['isOptimistic'] == true;
 
                     return Card(
-                      color: isPinned 
-                          ? AppColors.primary.withOpacity(0.06) 
-                          : (isAnswered ? (isDark ? Colors.black12 : Colors.grey[50]) : null),
+                      color: isPinned
+                          ? AppColors.primary.withValues(alpha: 0.06)
+                          : (isAnswered
+                                ? (isDark ? Colors.black12 : Colors.grey[50])
+                                : null),
                       margin: const EdgeInsets.only(bottom: AppSizes.space12),
                       shape: RoundedRectangleBorder(
                         side: BorderSide(
-                          color: isPinned ? AppColors.primary.withOpacity(0.3) : (isDark ? Colors.white10 : Colors.black12),
+                          color: isPinned
+                              ? AppColors.primary.withValues(alpha: 0.3)
+                              : (isDark ? Colors.white10 : Colors.black12),
                           width: isPinned ? 1.5 : 1.0,
                         ),
-                        borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+                        borderRadius: BorderRadius.circular(
+                          AppSizes.radiusCard,
+                        ),
                       ),
                       child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
                         title: Row(
                           children: [
                             if (isPinned) ...[
-                              const Icon(Icons.push_pin, color: Colors.orange, size: 16),
+                              const Icon(
+                                Icons.push_pin,
+                                color: Colors.orange,
+                                size: 16,
+                              ),
                               const SizedBox(width: 6),
                             ],
                             Expanded(
                               child: Text(
                                 text,
                                 style: TextStyle(
-                                  decoration: isAnswered ? TextDecoration.lineThrough : null,
-                                  fontWeight: isPinned ? FontWeight.bold : FontWeight.normal,
-                                  color: isAnswered 
-                                      ? Colors.grey 
-                                      : (isOptimistic ? (isDark ? Colors.white54 : Colors.black54) : (isDark ? Colors.white : Colors.black87)),
+                                  decoration: isAnswered
+                                      ? TextDecoration.lineThrough
+                                      : null,
+                                  fontWeight: isPinned
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isAnswered
+                                      ? Colors.grey
+                                      : (isOptimistic
+                                            ? (isDark
+                                                  ? Colors.white54
+                                                  : Colors.black54)
+                                            : (isDark
+                                                  ? Colors.white
+                                                  : Colors.black87)),
                                 ),
                               ),
                             ),
@@ -1258,7 +1903,10 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                               const SizedBox(
                                 width: 12,
                                 height: 12,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
                               ),
                             ],
                           ],
@@ -1269,27 +1917,54 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                             children: [
                               CircleAvatar(
                                 radius: 8,
-                                backgroundColor: AppColors.primary.withOpacity(0.2),
-                                child: Text(author.isNotEmpty ? author[0].toUpperCase() : 'A', style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                backgroundColor: AppColors.primary.withValues(
+                                  alpha: 0.2,
+                                ),
+                                child: Text(
+                                  author.isNotEmpty
+                                      ? author[0].toUpperCase()
+                                      : 'A',
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'By $author • ${isAnswered ? 'ANSWERED' : isOptimistic ? 'Sending...' : 'Active'}',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
+                                'By $author • ${isAnswered
+                                    ? 'ANSWERED'
+                                    : isOptimistic
+                                    ? 'Sending...'
+                                    : 'Active'}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         trailing: TextButton.icon(
-                          onPressed: isOptimistic ? null : () => _upvoteQuestion(qId, hasUpvoted),
+                          onPressed: isOptimistic
+                              ? null
+                              : () => _upvoteQuestion(qId, hasUpvoted),
                           icon: Icon(
-                            hasUpvoted ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
+                            hasUpvoted
+                                ? Icons.thumb_up_rounded
+                                : Icons.thumb_up_outlined,
                             color: AppColors.primary,
                             size: 16,
                           ),
                           label: Text(
                             '$upvotes',
-                            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ),
@@ -1301,6 +1976,3 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     );
   }
 }
-
-
-

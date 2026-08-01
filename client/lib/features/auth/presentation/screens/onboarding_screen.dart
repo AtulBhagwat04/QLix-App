@@ -63,8 +63,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF6366F1).withOpacity(0.08),
-                    const Color(0xFF6366F1).withOpacity(0.0),
+                    const Color(0xFF6366F1).withValues(alpha: 0.08),
+                    const Color(0xFF6366F1).withValues(alpha: 0.0),
                   ],
                 ),
               ),
@@ -131,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         borderRadius: BorderRadius.circular(4),
                         color: _currentPage == index
                             ? const Color(0xFF6366F1)
-                            : const Color(0xFF6366F1).withOpacity(0.2),
+                            : const Color(0xFF6366F1).withValues(alpha: 0.2),
                       ),
                     ),
                   ),
@@ -149,7 +149,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6366F1).withOpacity(0.35),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.35),
                         blurRadius: 12,
                         offset: const Offset(0, 6),
                       ),
@@ -211,7 +211,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 borderRadius: BorderRadius.circular(100),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6366F1).withOpacity(0.12),
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.12),
                     blurRadius: 16,
                     spreadRadius: 2,
                   ),
@@ -230,7 +230,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0), width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 24,
                   offset: const Offset(0, 12),
                 ),
@@ -490,184 +490,177 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           SizedBox(width: size.width),
 
           // Outer background Q&A layout container
-              Container(
-                width: 240,
-                margin: EdgeInsets.only(bottom: phoneMarginBottom),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 14,
+          Container(
+            width: 240,
+            margin: EdgeInsets.only(bottom: phoneMarginBottom),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: const Color(0xFFE2E8F0), width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: 6,
+                    bottom: isSmallScreen ? 8 : 12,
+                  ),
+                  child: const Text(
+                    'Top Questions',
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
                     ),
-                  ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: 6,
-                        bottom: isSmallScreen ? 8 : 12,
-                      ),
-                      child: const Text(
-                        'Top Questions',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Question 1
-                        _buildMiniQaCard(
-                              avatarGradient: const [
-                                Color(0xFFF43F5E),
-                                Color(0xFFEC4899),
-                              ],
-                              name: 'Shubham Kale',
-                              question: 'What is the pricing of QLix?',
-                              upvoteCount: 32,
-                              chevronColor: const Color(0xFF6366F1),
-                              statusText: 'Approved',
-                              statusColor: const Color(0xFF10B981),
-                              statusBgColor: const Color(0xFFD1FAE5),
-                              timeText: '2m ago',
-                            )
-                            .animate()
-                            .fadeIn(duration: 400.ms)
-                            .slideX(begin: -0.1),
-
-                        const SizedBox(height: 8),
-
-                        // Question 2 (Anonymous)
-                        _buildMiniQaCard(
-                              avatarGradient: const [
-                                Color(0xFF475569),
-                                Color(0xFF64748B),
-                              ],
-                              name: 'Anonymous',
-                              question:
-                                  'Will the recording be available later?',
-                              upvoteCount: 18,
-                              statusText: 'Approved',
-                              statusColor: const Color(0xFF10B981),
-                              statusBgColor: const Color(0xFFD1FAE5),
-                              chevronColor: const Color(0xFF6366F1),
-                              timeText: 'Just now',
-                            )
-                            .animate(delay: 200.ms)
-                            .fadeIn(duration: 400.ms)
-                            .slideX(begin: 0.1),
-
-                        // Question 3 (Shown only on standard screen to prevent overflow)
-                        if (!isSmallScreen) ...[
-                          const SizedBox(height: 8),
-                          _buildMiniQaCard(
-                                avatarGradient: const [
-                                  Color(0xFF3B82F6),
-                                  Color(0xFF06B6D4),
-                                ],
-                                name: 'Akshay Gorade',
-                                question: 'Can you share the resources?',
-                                upvoteCount: 7,
-                                statusText: 'Pending',
-                                statusColor: const Color(0xFFD97706),
-                                statusBgColor: const Color(0xFFFEF3C7),
-                                chevronColor: const Color(0xFF94A3B8),
-                              )
-                              .animate(delay: 400.ms)
-                              .fadeIn(duration: 400.ms)
-                              .slideX(begin: -0.1),
-                        ],
+                    // Question 1
+                    _buildMiniQaCard(
+                      avatarGradient: const [
+                        Color(0xFFF43F5E),
+                        Color(0xFFEC4899),
                       ],
-                    ),
-                    SizedBox(height: isSmallScreen ? 8 : 12),
-                    // Mock Input Bar
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: const [
-                          Expanded(
-                            child: Text(
-                              'Ask a question...',
-                              style: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.send_rounded,
-                            size: 12,
-                            color: Color(0xFF6366F1),
-                          ),
-                        ],
-                      ),
-                    ),
+                      name: 'Shubham Kale',
+                      question: 'What is the pricing of QLix?',
+                      upvoteCount: 32,
+                      chevronColor: const Color(0xFF6366F1),
+                      statusText: 'Approved',
+                      statusColor: const Color(0xFF10B981),
+                      statusBgColor: const Color(0xFFD1FAE5),
+                      timeText: '2m ago',
+                    ).animate().fadeIn(duration: 400.ms).slideX(begin: -0.1),
+
+                    const SizedBox(height: 8),
+
+                    // Question 2 (Anonymous)
+                    _buildMiniQaCard(
+                          avatarGradient: const [
+                            Color(0xFF475569),
+                            Color(0xFF64748B),
+                          ],
+                          name: 'Anonymous',
+                          question: 'Will the recording be available later?',
+                          upvoteCount: 18,
+                          statusText: 'Approved',
+                          statusColor: const Color(0xFF10B981),
+                          statusBgColor: const Color(0xFFD1FAE5),
+                          chevronColor: const Color(0xFF6366F1),
+                          timeText: 'Just now',
+                        )
+                        .animate(delay: 200.ms)
+                        .fadeIn(duration: 400.ms)
+                        .slideX(begin: 0.1),
+
+                    // Question 3 (Shown only on standard screen to prevent overflow)
+                    if (!isSmallScreen) ...[
+                      const SizedBox(height: 8),
+                      _buildMiniQaCard(
+                            avatarGradient: const [
+                              Color(0xFF3B82F6),
+                              Color(0xFF06B6D4),
+                            ],
+                            name: 'Akshay Gorade',
+                            question: 'Can you share the resources?',
+                            upvoteCount: 7,
+                            statusText: 'Pending',
+                            statusColor: const Color(0xFFD97706),
+                            statusBgColor: const Color(0xFFFEF3C7),
+                            chevronColor: const Color(0xFF94A3B8),
+                          )
+                          .animate(delay: 400.ms)
+                          .fadeIn(duration: 400.ms)
+                          .slideX(begin: -0.1),
+                    ],
                   ],
                 ),
-              ),
-
-              // Floating indicators/decorations (All premium glass bubbles)
-              // 1. Question Answer bubble (Top Left) - Large
-              Positioned(
-                left: 0,
-                top: 0,
-                child:
-                    _buildFloatingGlassBubble(
-                          icon: Icons.question_answer_rounded,
-                          color: const Color(0xFF6366F1), // Purple
-                          size: 45,
-                          iconSize: 22,
-                        )
-                        .animate(onPlay: (c) => c.repeat(reverse: true))
-                        .slideY(
-                          begin: 0,
-                          end: 0.12,
-                          duration: 1600.ms,
-                          curve: Curves.easeInOut,
+                SizedBox(height: isSmallScreen ? 8 : 12),
+                // Mock Input Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: const [
+                      Expanded(
+                        child: Text(
+                          'Ask a question...',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-              ),
+                      ),
+                      Icon(
+                        Icons.send_rounded,
+                        size: 12,
+                        color: Color(0xFF6366F1),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
 
-              // 2. Task Alt (Checkmark) bubble (Top Right) - Medium
-              Positioned(
-                right: 10,
-                bottom: 40,
-                child:
-                    _buildFloatingGlassBubble(
-                          icon: Icons.task_alt_rounded,
-                          color: const Color(0xFF10B981), // Emerald Green
-                          size: 40,
-                          iconSize: 18,
-                        )
-                        .animate(onPlay: (c) => c.repeat(reverse: true))
-                        .slideY(
-                          begin: 0,
-                          end: -0.12,
-                          duration: 1800.ms,
-                          curve: Curves.easeInOut,
-                        ),
-              ),
+          // Floating indicators/decorations (All premium glass bubbles)
+          // 1. Question Answer bubble (Top Left) - Large
+          Positioned(
+            left: 0,
+            top: 0,
+            child:
+                _buildFloatingGlassBubble(
+                      icon: Icons.question_answer_rounded,
+                      color: const Color(0xFF6366F1), // Purple
+                      size: 45,
+                      iconSize: 22,
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(
+                      begin: 0,
+                      end: 0.12,
+                      duration: 1600.ms,
+                      curve: Curves.easeInOut,
+                    ),
+          ),
+
+          // 2. Task Alt (Checkmark) bubble (Top Right) - Medium
+          Positioned(
+            right: 10,
+            bottom: 40,
+            child:
+                _buildFloatingGlassBubble(
+                      icon: Icons.task_alt_rounded,
+                      color: const Color(0xFF10B981), // Emerald Green
+                      size: 40,
+                      iconSize: 18,
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(
+                      begin: 0,
+                      end: -0.12,
+                      duration: 1800.ms,
+                      curve: Curves.easeInOut,
+                    ),
+          ),
         ],
       ),
     );
@@ -774,7 +767,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: statusBgColor ?? const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: (statusColor ?? Colors.grey).withOpacity(0.3),
+                    color: (statusColor ?? Colors.grey).withValues(alpha: 0.3),
                     width: 0.5,
                   ),
                 ),
@@ -825,7 +818,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               border: Border.all(color: const Color(0xFFE2E8F0), width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black.withValues(alpha: 0.04),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -1019,7 +1012,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 gradient: LinearGradient(colors: avatarGradient),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -1040,33 +1033,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             boxShadow: [
               BoxShadow(
-                color: blockColor.withOpacity(0.1),
+                color: blockColor.withValues(alpha: 0.1),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
             ],
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                score,
-                style: TextStyle(
-                  color: textColor.withOpacity(0.8),
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(height: 2),
+                Text(
+                  score,
+                  style: TextStyle(
+                    color: textColor.withValues(alpha: 0.8),
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
@@ -1084,10 +1080,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       padding: const EdgeInsets.symmetric(vertical: 5.0, horizontal: 8.0),
       decoration: isYou
           ? BoxDecoration(
-              color: const Color(0xFF6366F1).withOpacity(0.08),
+              color: const Color(0xFF6366F1).withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: const Color(0xFF6366F1).withOpacity(0.3),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                 width: 1,
               ),
             )
@@ -1221,7 +1217,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1233,7 +1229,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           child: Container(
             width: size,
             height: size,
-            color: Colors.white.withOpacity(0.85),
+            color: Colors.white.withValues(alpha: 0.85),
             child: Center(
               child: Icon(icon, size: computedIconSize, color: color),
             ),
@@ -1251,7 +1247,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1263,7 +1259,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            color: Colors.white.withOpacity(0.85),
+            color: Colors.white.withValues(alpha: 0.85),
             child: child,
           ),
         ),
@@ -1291,7 +1287,7 @@ class _BackgroundDotsPainter extends CustomPainter {
       final radius = rand.nextDouble() * 2.0 + 0.5;
       final opacity = rand.nextDouble() * 0.08 + 0.02; // Very subtle dots
 
-      paint.color = const Color(0xFF6366F1).withOpacity(opacity);
+      paint.color = const Color(0xFF6366F1).withValues(alpha: opacity);
       canvas.drawCircle(Offset(x, y), radius, paint);
     }
   }
