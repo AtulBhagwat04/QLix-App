@@ -10,12 +10,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_sizes.dart';
 
 import '../../../sessions/domain/repositories/session_repository.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
@@ -96,6 +94,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to load analytics: $e'),
@@ -118,11 +117,15 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         );
         await file.writeAsString(csvString);
 
-        await Share.shareXFiles([
-          XFile(file.path),
-        ], text: 'Exported session $type reports');
+        await SharePlus.instance.share(
+          ShareParams(
+            text: 'Exported session $type reports',
+            files: [XFile(file.path)],
+          ),
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to export CSV: $e'),
@@ -221,10 +224,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       );
       await file.writeAsBytes(await pdf.save());
 
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Exported session PDF report');
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Exported session PDF report',
+          files: [XFile(file.path)],
+        ),
+      );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to compile PDF: $e'),
@@ -436,8 +443,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         border: Border(
           bottom: BorderSide(
             color: isDark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.black.withOpacity(0.05),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
           ),
         ),
       ),
@@ -448,7 +455,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
@@ -486,10 +493,10 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: stateColor.withOpacity(0.08),
+                        color: stateColor.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: stateColor.withOpacity(0.2),
+                          color: stateColor.withValues(alpha: 0.2),
                           width: 1,
                         ),
                       ),
@@ -630,8 +637,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Row(
@@ -697,8 +704,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
             height: 72,
             width: 1,
             color: isDark
-                ? Colors.white.withOpacity(0.08)
-                : Colors.black.withOpacity(0.05),
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
             margin: const EdgeInsets.symmetric(horizontal: 10),
           ),
           Column(
@@ -709,7 +716,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withValues(alpha: 0.05),
                     width: 1,
                   ),
                 ),
@@ -718,7 +725,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   version: QrVersions.auto,
                   size: 72,
                   gapless: false,
-                  foregroundColor: Colors.black,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.black,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.black,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),
@@ -751,7 +765,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       ),
     );
   }
-  void _drawCenteredText(Canvas canvas, String text, double centerY, TextStyle style, double maxWidth) {
+
+  void _drawCenteredText(
+    Canvas canvas,
+    String text,
+    double centerY,
+    TextStyle style,
+    double maxWidth,
+  ) {
     final textPainter = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
@@ -768,7 +789,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       final qrValidationResult = QrValidator.validate(
         data: '${SocketClient.serverUrl}/session/$code',
         version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.M, // Allow room for center logo overlay
+        errorCorrectionLevel:
+            QrErrorCorrectLevel.M, // Allow room for center logo overlay
       );
 
       if (qrValidationResult.status == QrValidationStatus.valid) {
@@ -789,30 +811,45 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         // Define base dimensions for the poster
         const double posterWidth = 400.0;
         const double posterHeight = 720.0;
-        const double scaleFactor = 4.0; // 4x scaling renders a razor-sharp UHD image (1600 x 2880 pixels)
+        const double scaleFactor =
+            4.0; // 4x scaling renders a razor-sharp UHD image (1600 x 2880 pixels)
 
         final recorder = ui.PictureRecorder();
-        final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, posterWidth * scaleFactor, posterHeight * scaleFactor));
+        final canvas = Canvas(
+          recorder,
+          Rect.fromLTWH(
+            0,
+            0,
+            posterWidth * scaleFactor,
+            posterHeight * scaleFactor,
+          ),
+        );
 
         // Scale the canvas up for high definition rendering
         canvas.scale(scaleFactor);
 
         // 1. Draw Background (Plain Light Ice Theme matching the App style)
         final bgPaint = Paint()..color = const Color(0xFFF5F7FB);
-        canvas.drawRect(const Rect.fromLTWH(0, 0, posterWidth, posterHeight), bgPaint);
+        canvas.drawRect(
+          const Rect.fromLTWH(0, 0, posterWidth, posterHeight),
+          bgPaint,
+        );
 
         // Draw a light clean border around the poster edges
         final borderPaint = Paint()
           ..color = const Color(0xFFE2E8F0)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.0;
-        canvas.drawRect(const Rect.fromLTWH(0, 0, posterWidth, posterHeight), borderPaint);
+        canvas.drawRect(
+          const Rect.fromLTWH(0, 0, posterWidth, posterHeight),
+          borderPaint,
+        );
 
         // 2. Draw Logo and QLix Header
         // Indigo logo circle
         final logoBgPaint = Paint()..color = const Color(0xFF6366F1);
         canvas.drawCircle(const Offset(140, 75), 18, logoBgPaint);
-        
+
         // Logo Text "Q"
         final logoTextPainter = TextPainter(
           text: const TextSpan(
@@ -825,7 +862,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        logoTextPainter.paint(canvas, Offset(140 - (logoTextPainter.width / 2), 75 - (logoTextPainter.height / 2)));
+        logoTextPainter.paint(
+          canvas,
+          Offset(
+            140 - (logoTextPainter.width / 2),
+            75 - (logoTextPainter.height / 2),
+          ),
+        );
 
         // QLix brand name
         final brandPainter = TextPainter(
@@ -871,9 +914,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         // 4. Draw Qr Code Rounded Container (White Card)
         final cardPaint = Paint()..color = const Color(0xFFFFFFFF);
         final cardShadowPaint = Paint()
-          ..color = const Color(0xFF0F172A).withOpacity(0.04)
+          ..color = const Color(0xFF0F172A).withValues(alpha: 0.04)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-        
+
         final cardRect = RRect.fromRectAndRadius(
           const Rect.fromLTWH(50, 210, 300, 300),
           const Radius.circular(24),
@@ -919,11 +962,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         )..layout();
         centerLogoText.paint(
           canvas,
-          Offset(200 - (centerLogoText.width / 2), 360 - (centerLogoText.height / 2)),
+          Offset(
+            200 - (centerLogoText.width / 2),
+            360 - (centerLogoText.height / 2),
+          ),
         );
 
         // 6. Draw Host Session Code
-        final formattedCode = code.length == 6 ? '${code.substring(0, 3)} ${code.substring(3)}' : code;
+        final formattedCode = code.length == 6
+            ? '${code.substring(0, 3)} ${code.substring(3)}'
+            : code;
         _drawCenteredText(
           canvas,
           'SESSION CODE',
@@ -964,8 +1012,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         );
 
         final picture = recorder.endRecording();
-        final ui.Image image = await picture.toImage((posterWidth * scaleFactor).toInt(), (posterHeight * scaleFactor).toInt());
-        final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        final ui.Image image = await picture.toImage(
+          (posterWidth * scaleFactor).toInt(),
+          (posterHeight * scaleFactor).toInt(),
+        );
+        final ByteData? byteData = await image.toByteData(
+          format: ui.ImageByteFormat.png,
+        );
 
         if (byteData != null) {
           final Uint8List pngBytes = byteData.buffer.asUint8List();
@@ -973,31 +1026,37 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           final file = File('${tempDir.path}/qlix_session_invite_$code.png');
           await file.writeAsBytes(pngBytes);
 
-          final text = 'Join my QLix interactive session using code: $code\n'
+          final text =
+              'Join my QLix interactive session using code: $code\n'
               'Scan the attached QR code to join directly!\n\n'
-              'Download QLix app from Play Store or App Store:\n'
-              'Android (Play Store): https://play.google.com/store/apps/details?id=com.atulbhagwat.qlix\n'
-              'iOS (App Store): https://apps.apple.com/app/qlix/id1234567890\n\n'
-              'Or join via web at: ${SocketClient.serverUrl}/session/$code';
+              'Install QLix app using : https://play.google.com/store/apps/details?id=com.atulbhagwat.qlix\n';
 
-          await Share.shareXFiles(
-            [XFile(file.path)],
-            text: text,
-            subject: 'Join QLix Session: $code',
+          await SharePlus.instance.share(
+            ShareParams(
+              text: text,
+              files: [XFile(file.path)],
+              subject: 'Join QLix Session: $code',
+            ),
           );
           return;
         }
       }
 
-      await Share.share(
-        'Join my QLix interactive session using code: $code\n'
-        'Or join online at: ${SocketClient.serverUrl}/session/$code',
+      await SharePlus.instance.share(
+        ShareParams(
+          text:
+              'Join my QLix interactive session using code: $code\n'
+              'Or join online at: ${SocketClient.serverUrl}/session/$code',
+        ),
       );
     } catch (e) {
       debugPrint('Error sharing QR: $e');
-      await Share.share(
-        'Join my QLix interactive session using code: $code\n'
-        'Or join online at: ${SocketClient.serverUrl}/session/$code',
+      await SharePlus.instance.share(
+        ShareParams(
+          text:
+              'Join my QLix interactive session using code: $code\n'
+              'Or join online at: ${SocketClient.serverUrl}/session/$code',
+        ),
       );
     }
   }
@@ -1018,9 +1077,11 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       engColor = AppColors.warning;
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double cardWidth = (constraints.maxWidth - 16) / 2;
+    return Builder(
+      builder: (context) {
+        final double screenWidth = MediaQuery.of(context).size.width;
+        final double availableWidth = screenWidth > 800 ? (screenWidth - 320) : (screenWidth - 32);
+        final double cardWidth = (availableWidth - 16) / 2;
         return Wrap(
           spacing: 16,
           runSpacing: 16,
@@ -1029,7 +1090,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               isDark: isDark,
               width: cardWidth,
               icon: Icons.people_outline_rounded,
-              iconBgColor: AppColors.primary.withOpacity(0.08),
+              iconBgColor: AppColors.primary.withValues(alpha: 0.08),
               iconColor: AppColors.primary,
               value: '$participantsCount',
               label: 'Total Users',
@@ -1060,7 +1121,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               isDark: isDark,
               width: cardWidth,
               icon: Icons.insights_rounded,
-              iconBgColor: engColor.withOpacity(0.08),
+              iconBgColor: engColor.withValues(alpha: 0.08),
               iconColor: engColor,
               value: '${(averageEngagement * 10).clamp(0, 100).toInt()}%',
               label: 'Engagement Rate',
@@ -1091,7 +1152,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               isDark: isDark,
               width: cardWidth,
               icon: Icons.how_to_vote_rounded,
-              iconBgColor: AppColors.secondary.withOpacity(0.08),
+              iconBgColor: AppColors.secondary.withValues(alpha: 0.08),
               iconColor: AppColors.secondary,
               value: '$totalVotes',
               label: 'Votes Cast',
@@ -1108,7 +1169,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               isDark: isDark,
               width: cardWidth,
               icon: Icons.timer_outlined,
-              iconBgColor: AppColors.purpleAccent.withOpacity(0.08),
+              iconBgColor: AppColors.purpleAccent.withValues(alpha: 0.08),
               iconColor: AppColors.purpleAccent,
               value: _getMockAvgTime(participantsCount, totalVotes),
               label: 'Avg Response Time',
@@ -1153,8 +1214,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Column(
@@ -1212,8 +1273,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isDark
-              ? Colors.white.withOpacity(0.08)
-              : Colors.black.withOpacity(0.05),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Column(
@@ -1242,7 +1303,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   border: Border.all(
                     color: isDark
                         ? Colors.white12
-                        : Colors.black.withOpacity(0.05),
+                        : Colors.black.withValues(alpha: 0.05),
                   ),
                 ),
                 child: Row(
@@ -1293,8 +1354,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
                             color: isDark
-                                ? Colors.white.withOpacity(0.05)
-                                : Colors.black.withOpacity(0.04),
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.black.withValues(alpha: 0.04),
                             strokeWidth: 1,
                           );
                         },
@@ -1410,8 +1471,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                             show: true,
                             gradient: LinearGradient(
                               colors: [
-                                AppColors.primary.withOpacity(0.18),
-                                AppColors.primary.withOpacity(0.0),
+                                AppColors.primary.withValues(alpha: 0.18),
+                                AppColors.primary.withValues(alpha: 0.0),
                               ],
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
@@ -1472,8 +1533,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isDark
-                        ? Colors.white.withOpacity(0.08)
-                        : Colors.black.withOpacity(0.05),
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
                   ),
                 ),
                 child: const Center(
@@ -1546,14 +1607,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: isDark
-                            ? Colors.white.withOpacity(0.08)
-                            : Colors.black.withOpacity(0.05),
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05),
                       ),
                     ),
                     child: Row(
                       children: [
                         CircleAvatar(
-                          backgroundColor: avatarBg.withOpacity(0.08),
+                          backgroundColor: avatarBg.withValues(alpha: 0.08),
                           radius: 16,
                           child: Text(
                             initials,
@@ -1600,7 +1661,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                '${pollTitle.length > 12 ? pollTitle.substring(0, 10) + "..." : pollTitle} • ${_getShortTypeName(type).toUpperCase()}',
+                                '${pollTitle.length > 12 ? "${pollTitle.substring(0, 10)}..." : pollTitle} • ${_getShortTypeName(type).toUpperCase()}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
@@ -1618,7 +1679,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                                   vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withOpacity(0.08),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.08,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -1651,7 +1714,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
             Icon(
               Icons.forum_outlined,
               size: 48,
-              color: Colors.grey.withOpacity(0.4),
+              color: Colors.grey.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -1691,16 +1754,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isPinned
-                  ? AppColors.primary.withOpacity(0.3)
+                  ? AppColors.primary.withValues(alpha: 0.3)
                   : (isDark
-                        ? Colors.white.withOpacity(0.08)
-                        : Colors.black.withOpacity(0.05)),
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05)),
               width: isPinned ? 1.5 : 1.0,
             ),
             boxShadow: isPinned
                 ? [
                     BoxShadow(
-                      color: AppColors.primary.withOpacity(0.04),
+                      color: AppColors.primary.withValues(alpha: 0.04),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -1728,7 +1791,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         child: Row(
                           children: [
                             CircleAvatar(
-                              backgroundColor: avatarColor.withOpacity(0.08),
+                              backgroundColor: avatarColor.withValues(
+                                alpha: 0.08,
+                              ),
                               radius: 14,
                               child: Text(
                                 initials,
@@ -1804,13 +1869,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         ),
                         decoration: BoxDecoration(
                           color: status == 'answered'
-                              ? Colors.green.withOpacity(0.08)
-                              : Colors.grey.withOpacity(0.08),
+                              ? Colors.green.withValues(alpha: 0.08)
+                              : Colors.grey.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
                             color: status == 'answered'
-                                ? Colors.green.withOpacity(0.15)
-                                : Colors.grey.withOpacity(0.15),
+                                ? Colors.green.withValues(alpha: 0.15)
+                                : Colors.grey.withValues(alpha: 0.15),
                             width: 1,
                           ),
                         ),
@@ -1832,10 +1897,10 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.secondary.withOpacity(0.08),
+                          color: AppColors.secondary.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: AppColors.secondary.withOpacity(0.2),
+                            color: AppColors.secondary.withValues(alpha: 0.2),
                             width: 1,
                           ),
                         ),
@@ -1879,7 +1944,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
             Icon(
               Icons.insert_chart_outlined_rounded,
               size: 48,
-              color: Colors.grey.withOpacity(0.4),
+              color: Colors.grey.withValues(alpha: 0.4),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -1927,8 +1992,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isDark
-                  ? Colors.white.withOpacity(0.08)
-                  : Colors.black.withOpacity(0.05),
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
             ),
           ),
           child: Column(
@@ -1964,7 +2029,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                                   : (status == 'ended'
                                         ? Colors.grey
                                         : AppColors.warning))
-                              .withOpacity(0.08),
+                              .withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
                         color:
@@ -1973,7 +2038,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                                     : (status == 'ended'
                                           ? Colors.grey
                                           : AppColors.warning))
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                         width: 1,
                       ),
                     ),
@@ -2046,13 +2111,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   height: 36,
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withOpacity(0.02)
+                        ? Colors.white.withValues(alpha: 0.02)
                         : const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isDark
-                          ? Colors.white.withOpacity(0.04)
-                          : Colors.black.withOpacity(0.03),
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.black.withValues(alpha: 0.03),
                     ),
                   ),
                 ),
@@ -2061,7 +2126,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   child: Container(
                     height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.08),
+                      color: AppColors.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
@@ -2111,7 +2176,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.06),
+              color: AppColors.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -2158,7 +2223,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.08),
+            color: AppColors.primary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(
@@ -2221,16 +2286,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -2252,7 +2317,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                       Icon(
                         Icons.group_off_rounded,
                         size: 48,
-                        color: Colors.grey.withOpacity(0.4),
+                        color: Colors.grey.withValues(alpha: 0.4),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -2302,14 +2367,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isDark
-                              ? Colors.white.withOpacity(0.08)
-                              : Colors.black.withOpacity(0.05),
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.05),
                         ),
                       ),
                       child: Row(
                         children: [
                           CircleAvatar(
-                            backgroundColor: avatarColor.withOpacity(0.08),
+                            backgroundColor: avatarColor.withValues(
+                              alpha: 0.08,
+                            ),
                             radius: 16,
                             child: Text(
                               initials,
@@ -2349,7 +2416,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.grey.withOpacity(0.08),
+                                          color: Colors.grey.withValues(
+                                            alpha: 0.08,
+                                          ),
                                           borderRadius: BorderRadius.circular(
                                             4,
                                           ),
@@ -2437,16 +2506,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -2474,16 +2543,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(
                   color: isDark
-                      ? Colors.white.withOpacity(0.08)
-                      : Colors.black.withOpacity(0.05),
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
                 ),
               ),
               focusedBorder: OutlineInputBorder(
@@ -2513,8 +2582,8 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark
-                    ? Colors.white.withOpacity(0.08)
-                    : Colors.black.withOpacity(0.05),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.05),
               ),
             ),
             child: Row(
@@ -2600,6 +2669,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         widget.sessionId,
         {'state': newStatus},
       );
+      if (!mounted) return;
       setState(() {
         _session = updated;
       });
@@ -2610,6 +2680,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update status: $e'),
@@ -2638,6 +2709,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         widget.sessionId,
         {'title': title, 'description': _descController.text.trim()},
       );
+      if (!mounted) return;
       setState(() {
         _session = updated;
         _isSavingSettings = false;
@@ -2649,6 +2721,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         ),
       );
     } catch (e) {
+      if (!mounted) return;
       setState(() => _isSavingSettings = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

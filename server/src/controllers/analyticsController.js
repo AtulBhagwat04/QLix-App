@@ -7,27 +7,27 @@ export const getSessionAnalytics = async (req, res, next) => {
   try {
     // 1. Total Participant Count
     const partCountRes = await db.query(
-      'SELECT COUNT(*) FROM participants WHERE session_id = $1',
+      'SELECT COUNT(*) as count FROM participants WHERE session_id = $1',
       [sessionId]
     );
-    const totalParticipants = parseInt(partCountRes.rows[0].count, 10);
+    const totalParticipants = parseInt(partCountRes.rows[0]?.count ?? partCountRes.rows[0]?.['COUNT(*)'] ?? 0, 10) || 0;
 
     // 2. Total Votes Count
     const voteCountRes = await db.query(
-      `SELECT COUNT(v.id) 
+      `SELECT COUNT(v.id) as count
        FROM votes v
        JOIN polls p ON v.poll_id = p.id
        WHERE p.session_id = $1`,
       [sessionId]
     );
-    const totalVotes = parseInt(voteCountRes.rows[0].count, 10);
+    const totalVotes = parseInt(voteCountRes.rows[0]?.count ?? voteCountRes.rows[0]?.['COUNT(v.id)'] ?? 0, 10) || 0;
 
     // 3. Total Q&A Questions Count
     const qaCountRes = await db.query(
-      'SELECT COUNT(*) FROM questions WHERE session_id = $1',
+      'SELECT COUNT(*) as count FROM questions WHERE session_id = $1',
       [sessionId]
     );
-    const totalQuestions = parseInt(qaCountRes.rows[0].count, 10);
+    const totalQuestions = parseInt(qaCountRes.rows[0]?.count ?? qaCountRes.rows[0]?.['COUNT(*)'] ?? 0, 10) || 0;
 
     // 4. Poll by Poll Stats
     const pollsStatsRes = await db.query(

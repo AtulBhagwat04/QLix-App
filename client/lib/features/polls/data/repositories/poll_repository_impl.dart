@@ -11,7 +11,9 @@ class PollRepositoryImpl implements PollRepository {
     final response = await _apiClient.dio.get('/polls/session/$sessionId');
     if (response.statusCode == 200 && response.data != null) {
       final list = response.data['data'] as List;
-      return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      return list
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
     }
     throw Exception(response.data?['message'] ?? 'Failed to load polls');
   }
@@ -24,13 +26,16 @@ class PollRepositoryImpl implements PollRepository {
     Map<String, dynamic>? settings,
     List<Map<String, dynamic>>? options,
   }) async {
-    final response = await _apiClient.dio.post('/polls', data: {
-      'sessionId': sessionId,
-      'title': title,
-      'type': type,
-      'settings': settings,
-      'options': options,
-    });
+    final response = await _apiClient.dio.post(
+      '/polls',
+      data: {
+        'sessionId': sessionId,
+        'title': title,
+        'type': type,
+        'settings': settings,
+        'options': options,
+      },
+    );
 
     if (response.statusCode == 201 && response.data != null) {
       return Map<String, dynamic>.from(response.data['data'] as Map);
@@ -39,7 +44,10 @@ class PollRepositoryImpl implements PollRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> updatePoll(String pollId, Map<String, dynamic> body) async {
+  Future<Map<String, dynamic>> updatePoll(
+    String pollId,
+    Map<String, dynamic> body,
+  ) async {
     final response = await _apiClient.dio.patch('/polls/$pollId', data: body);
     if (response.statusCode == 200 && response.data != null) {
       return Map<String, dynamic>.from(response.data['data'] as Map);

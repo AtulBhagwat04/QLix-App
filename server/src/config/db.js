@@ -214,7 +214,14 @@ async function executeSQL(pgSql, pgParams = [], clientState = null) {
     const mappedParams = [];
     sql = sql.replace(/\$(\d+)/g, (match, num) => {
       const idx = parseInt(num, 10) - 1;
-      mappedParams.push(pgParams[idx]);
+      let val = pgParams[idx];
+      if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+        val = JSON.stringify(val);
+      }
+      if (typeof val === 'number' && isNaN(val)) {
+        val = 0;
+      }
+      mappedParams.push(val);
       return '?';
     });
     params = mappedParams;

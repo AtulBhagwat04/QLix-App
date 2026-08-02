@@ -79,20 +79,33 @@ abstract class SessionState extends Equatable {
 }
 
 class SessionInitial extends SessionState {}
+
 class SessionLoading extends SessionState {}
+
 class SessionsLoaded extends SessionState {
   final List<Map<String, dynamic>> sessions;
   final Map<String, dynamic>? stats;
-  const SessionsLoaded(this.sessions, {this.stats});
+  final bool isOffline;
+  final String? errorMessage;
+
+  const SessionsLoaded(
+    this.sessions, {
+    this.stats,
+    this.isOffline = false,
+    this.errorMessage,
+  });
+
   @override
-  List<Object?> get props => [sessions, stats];
+  List<Object?> get props => [sessions, stats, isOffline, errorMessage];
 }
+
 class SessionCreateSuccess extends SessionState {
   final Map<String, dynamic> session;
   const SessionCreateSuccess(this.session);
   @override
   List<Object?> get props => [session];
 }
+
 class SessionJoinSuccess extends SessionState {
   final Map<String, dynamic> session;
   final Map<String, dynamic> participant;
@@ -132,23 +145,41 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     on<DeleteSessionRequested>(_onDeleteSessionRequested);
   }
 
-  Future<void> _onLoadSessions(LoadSessions event, Emitter<SessionState> emit) async {
+  Future<void> _onLoadSessions(
+    LoadSessions event,
+    Emitter<SessionState> emit,
+  ) async {
     emit(SessionLoading());
+    bool isOffline = false;
+    String? errorMessage;
+    List<Map<String, dynamic>> list = [];
+    Map<String, dynamic>? stats;
+
     try {
-      final list = await sessionRepository.getSessions();
-      Map<String, dynamic>? stats;
-      try {
-        stats = await sessionRepository.getOverviewStats();
-      } catch (_) {
-        // Ignore failure, fallback to null
-      }
-      emit(SessionsLoaded(list, stats: stats));
+      list = await sessionRepository.getSessions();
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      isOffline = true;
+      errorMessage = e.toString().replaceAll('Exception: ', '');
     }
+
+    try {
+      stats = await sessionRepository.getOverviewStats();
+    } catch (_) {
+      // Ignore failure, fallback to cached or null
+    }
+
+    emit(SessionsLoaded(
+      list,
+      stats: stats,
+      isOffline: isOffline,
+      errorMessage: errorMessage,
+    ));
   }
 
-  Future<void> _onCreateSessionRequested(CreateSessionRequested event, Emitter<SessionState> emit) async {
+  Future<void> _onCreateSessionRequested(
+    CreateSessionRequested event,
+    Emitter<SessionState> emit,
+  ) async {
     emit(SessionLoading());
     try {
       final session = await sessionRepository.createSession(
@@ -162,7 +193,10 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     }
   }
 
-  Future<void> _onJoinSessionRequested(JoinSessionRequested event, Emitter<SessionState> emit) async {
+  Future<void> _onJoinSessionRequested(
+    JoinSessionRequested event,
+    Emitter<SessionState> emit,
+  ) async {
     emit(SessionLoading());
     try {
       final data = await sessionRepository.joinSessionByCode(
@@ -179,17 +213,25 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     }
   }
 
-  Future<void> _onVerifySessionCodeRequested(VerifySessionCodeRequested event, Emitter<SessionState> emit) async {
+  Future<void> _onVerifySessionCodeRequested(
+    VerifySessionCodeRequested event,
+    Emitter<SessionState> emit,
+  ) async {
     emit(SessionLoading());
     try {
-      final session = await sessionRepository.verifySessionCode(event.accessCode);
+      final session = await sessionRepository.verifySessionCode(
+        event.accessCode,
+      );
       emit(SessionVerifySuccess(session));
     } catch (e) {
       emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
     }
   }
 
-  Future<void> _onUpdateSessionRequested(UpdateSessionRequested event, Emitter<SessionState> emit) async {
+  Future<void> _onUpdateSessionRequested(
+    UpdateSessionRequested event,
+    Emitter<SessionState> emit,
+  ) async {
     try {
       await sessionRepository.updateSession(event.sessionId, event.body);
       add(LoadSessions());
@@ -198,7 +240,10 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     }
   }
 
-  Future<void> _onDeleteSessionRequested(DeleteSessionRequested event, Emitter<SessionState> emit) async {
+  Future<void> _onDeleteSessionRequested(
+    DeleteSessionRequested event,
+    Emitter<SessionState> emit,
+  ) async {
     try {
       await sessionRepository.deleteSession(event.sessionId);
       add(LoadSessions());

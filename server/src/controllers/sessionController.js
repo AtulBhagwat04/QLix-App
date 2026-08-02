@@ -126,11 +126,19 @@ export const joinSessionByCode = async (req, res, next) => {
       participant = insertRes.rows[0];
     }
 
+    // Retrieve all poll IDs this participant has already voted on in this session
+    const votedRes = await db.query(
+      'SELECT DISTINCT poll_id FROM votes WHERE participant_id = $1',
+      [participant.id]
+    );
+    const votedPollIds = votedRes.rows.map(r => r.poll_id);
+
     res.status(200).json({
       status: 'success',
       data: {
         session,
         participant,
+        votedPollIds,
       },
     });
   } catch (error) {

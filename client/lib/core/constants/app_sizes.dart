@@ -28,4 +28,3 @@ class AppSizes {
   // Specific heights
   static const double barHeight = 4.0;
 }
-

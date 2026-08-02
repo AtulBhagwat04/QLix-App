@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -85,9 +84,10 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                   const SizedBox(height: 28),
 
                   // Tab switcher (Login / Sign Up)
-                  _buildTabs(context, true)
-                      .animate()
-                      .fadeIn(delay: 120.ms, duration: 300.ms),
+                  _buildTabs(
+                    context,
+                    true,
+                  ).animate().fadeIn(delay: 120.ms, duration: 300.ms),
                   const SizedBox(height: 24),
 
                   // Login Form Card
@@ -155,9 +155,7 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                           validator: (v) => v == null || !v.contains('@')
                               ? 'Enter a valid email'
                               : null,
-                        )
-                        .animate()
-                        .fadeIn(delay: 140.ms, duration: 300.ms),
+                        ).animate().fadeIn(delay: 140.ms, duration: 300.ms),
                         const SizedBox(height: 16),
 
                         // Password field
@@ -233,9 +231,7 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                           validator: (v) => v == null || v.length < 6
                               ? 'Password must be at least 6 characters'
                               : null,
-                        )
-                        .animate()
-                        .fadeIn(delay: 160.ms, duration: 300.ms),
+                        ).animate().fadeIn(delay: 160.ms, duration: 300.ms),
                         const SizedBox(height: 16),
 
                         // Remember me & Forgot password
@@ -281,7 +277,9 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                                   SnackBar(
                                     content: const Text(
                                       'Password reset functionality is under development.',
-                                      style: TextStyle(fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     behavior: SnackBarBehavior.floating,
                                     shape: RoundedRectangleBorder(
@@ -300,83 +298,81 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                               ),
                             ),
                           ],
-                        )
-                        .animate()
-                        .fadeIn(delay: 180.ms, duration: 300.ms),
+                        ).animate().fadeIn(delay: 180.ms, duration: 300.ms),
                         const SizedBox(height: 24),
 
                         // Login Button
                         BlocConsumer<AuthBloc, AuthState>(
-                          listener: (context, state) {
-                            if (state is Authenticated) {
-                              context.go('/dashboard');
-                            } else if (state is AuthFailure) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(state.message),
-                                  backgroundColor: AppColors.error,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppSizes.radiusInput,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                          builder: (context, state) {
-                            if (state is AuthLoading) {
-                              return const Center(
-                                child: CircularProgressIndicator(
-                                  color: Color(0xFF6366F1),
-                                ),
-                              );
-                            }
-
-                            return _AnimatedScaleButton(
-                              onPressed: () {
-                                if (_formKey.currentState!.validate()) {
-                                  context.read<AuthBloc>().add(
-                                    LoginRequested(
-                                      _emailController.text.trim(),
-                                      _passwordController.text,
+                              listener: (context, state) {
+                                if (state is Authenticated) {
+                                  context.go('/dashboard');
+                                } else if (state is AuthFailure) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(state.message),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppSizes.radiusInput,
+                                        ),
+                                      ),
                                     ),
                                   );
                                 }
                               },
-                              child: Container(
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF6366F1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF6366F1).withValues(
-                                        alpha: 0.2,
-                                      ),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
+                              builder: (context, state) {
+                                if (state is AuthLoading) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF6366F1),
                                     ),
-                                  ],
-                                ),
-                                alignment: Alignment.center,
-                                child: const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                    letterSpacing: 0.5,
+                                  );
+                                }
+
+                                return _AnimatedScaleButton(
+                                  onPressed: () {
+                                    if (_formKey.currentState!.validate()) {
+                                      context.read<AuthBloc>().add(
+                                        LoginRequested(
+                                          _emailController.text.trim(),
+                                          _passwordController.text,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF6366F1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFF6366F1,
+                                          ).withValues(alpha: 0.2),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'Login',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            );
-                          },
-                        )
-                        .animate()
-                        .fadeIn(delay: 200.ms, duration: 400.ms)
-                        .slideY(begin: 0.1, end: 0),
+                                );
+                              },
+                            )
+                            .animate()
+                            .fadeIn(delay: 200.ms, duration: 400.ms)
+                            .slideY(begin: 0.1, end: 0),
                       ],
                     ),
                   ),
@@ -406,9 +402,7 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                         ),
                       ),
                     ],
-                  )
-                  .animate()
-                  .fadeIn(delay: 260.ms, duration: 300.ms),
+                  ).animate().fadeIn(delay: 260.ms, duration: 300.ms),
                   const SizedBox(height: 12),
                 ],
               ),
@@ -453,7 +447,9 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: isLogin ? FontWeight.bold : FontWeight.w600,
-                        color: isLogin ? const Color(0xFF6366F1) : const Color(0xFF94A3B8),
+                        color: isLogin
+                            ? const Color(0xFF6366F1)
+                            : const Color(0xFF94A3B8),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -461,8 +457,12 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                       height: 2.5,
                       width: 100,
                       decoration: BoxDecoration(
-                        color: isLogin ? const Color(0xFF6366F1) : Colors.transparent,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        color: isLogin
+                            ? const Color(0xFF6366F1)
+                            : Colors.transparent,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(2),
+                        ),
                       ),
                     ),
                   ],
@@ -483,8 +483,12 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                       'Sign Up',
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: !isLogin ? FontWeight.bold : FontWeight.w600,
-                        color: !isLogin ? const Color(0xFF6366F1) : const Color(0xFF94A3B8),
+                        fontWeight: !isLogin
+                            ? FontWeight.bold
+                            : FontWeight.w600,
+                        color: !isLogin
+                            ? const Color(0xFF6366F1)
+                            : const Color(0xFF94A3B8),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -492,8 +496,12 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                       height: 2.5,
                       width: 100,
                       decoration: BoxDecoration(
-                        color: !isLogin ? const Color(0xFF6366F1) : Colors.transparent,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                        color: !isLogin
+                            ? const Color(0xFF6366F1)
+                            : Colors.transparent,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(2),
+                        ),
                       ),
                     ),
                   ],
@@ -502,10 +510,7 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
             ),
           ],
         ),
-        Container(
-          height: 1,
-          color: const Color(0xFFE2E8F0),
-        ),
+        Container(height: 1, color: const Color(0xFFE2E8F0)),
       ],
     );
   }
@@ -557,9 +562,7 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
                 size: 44,
               ),
             ),
-          )
-          .animate()
-          .scale(
+          ).animate().scale(
             begin: const Offset(0.7, 0.7),
             duration: 600.ms,
             curve: Curves.easeOutBack,
@@ -570,68 +573,77 @@ class _HostLoginScreenState extends State<HostLoginScreen> {
           Positioned(
             left: 10,
             top: 20,
-            child: const Text(
-              '×',
-              style: TextStyle(
-                color: Color(0xFF8B5CF6),
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .slideY(begin: 0, end: -0.15, duration: 1500.ms),
+            child:
+                const Text(
+                      '×',
+                      style: TextStyle(
+                        color: Color(0xFF8B5CF6),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(begin: 0, end: -0.15, duration: 1500.ms),
           ),
           // Left Circle
           Positioned(
             left: 8,
             bottom: 30,
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF8B5CF6), width: 1.5),
-              ),
-            )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .slideY(begin: 0, end: 0.15, duration: 1800.ms),
+            child:
+                Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF8B5CF6),
+                          width: 1.5,
+                        ),
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(begin: 0, end: 0.15, duration: 1800.ms),
           ),
           // Right Circle
           Positioned(
             right: 12,
             top: 40,
-            child: Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF8B5CF6), width: 1.5),
-              ),
-            )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .slideY(begin: 0, end: -0.2, duration: 1600.ms),
+            child:
+                Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF8B5CF6),
+                          width: 1.5,
+                        ),
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(begin: 0, end: -0.2, duration: 1600.ms),
           ),
           // Bottom-Right Cross
           Positioned(
             right: 16,
             bottom: 18,
-            child: const Text(
-              '×',
-              style: TextStyle(
-                color: Color(0xFF8B5CF6),
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            )
-            .animate(onPlay: (c) => c.repeat(reverse: true))
-            .slideY(begin: 0, end: 0.15, duration: 2000.ms),
+            child:
+                const Text(
+                      '×',
+                      style: TextStyle(
+                        color: Color(0xFF8B5CF6),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .slideY(begin: 0, end: 0.15, duration: 2000.ms),
           ),
         ],
       ),
     );
   }
 }
-
 
 // Press scaling helper button
 class _AnimatedScaleButton extends StatefulWidget {
