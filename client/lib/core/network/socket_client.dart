@@ -9,7 +9,7 @@ class SocketClient {
 
   static String get defaultHost {
     if (kIsWeb) return 'localhost';
-    return '10.109.186.64';
+    return '10.225.134.64';
   }
 
   static String get serverUrl {
@@ -18,7 +18,8 @@ class SocketClient {
       if (ip != null &&
           ip.trim().isNotEmpty &&
           ip.trim() != '10.202.235.64' &&
-          ip.trim() != '10.128.231.64') {
+          ip.trim() != '10.128.231.64' &&
+          ip.trim() != '10.109.186.64') {
         return 'http://${ip.trim()}:3000';
       }
     } catch (_) {}
@@ -253,6 +254,13 @@ class SocketClient {
       'sessionId': sessionId,
       'pollId': pollId,
       'durationSeconds': durationSeconds,
+    });
+  }
+
+  void stopQuizTimer(String sessionId, String pollId) {
+    _socket?.emit('stop_quiz_timer', {
+      'sessionId': sessionId,
+      'pollId': pollId,
     });
   }
 

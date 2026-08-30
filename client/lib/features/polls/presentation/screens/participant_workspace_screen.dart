@@ -6,7 +6,6 @@ import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/cache_manager.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
@@ -77,6 +76,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
   // Optimistic UI tracking
   final Set<String> _votedPollIds = {};
+  final Set<String> _editingPollIds = {};
 
   // Quiz states
   Map<String, dynamic>? _activeQuiz;
@@ -301,11 +301,12 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
         if (!mounted) return;
 
         if (event == 'start') {
+          final pollIdStr = pollId.toString();
           setState(() {
-            _activeQuiz = {'id': pollId};
+            _activeQuiz = {'id': pollIdStr};
             _quizTimeRemaining =
                 (data['durationSeconds'] as num?)?.toInt() ?? 15;
-            _hasAnsweredQuiz = false;
+            _hasAnsweredQuiz = _votedPollIds.contains(pollIdStr);
           });
           sl<PollRepository>()
               .getPollResults(pollId)
@@ -368,21 +369,131 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   void _showAnnouncementDialog(String title, String message) {
     showDialog(
       context: context,
+      barrierDismissible: true,
       builder: (context) {
-        return AlertDialog(
-          icon: const Icon(
-            Icons.campaign_rounded,
-            color: AppColors.primary,
-            size: AppSizes.iconLarge,
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
           ),
-          title: Text(title, textAlign: TextAlign.center),
-          content: Text(message, textAlign: TextAlign.center),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Dismiss'),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : const Color(0xFFE2E8F0),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  blurRadius: 32,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
-          ],
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: AppColors.primaryGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.campaign_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'HOST BROADCAST',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                    color: isDark
+                        ? Colors.white70
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Got it',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -468,6 +579,10 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           optionId,
         )
         .then((res) {
+          final pollId = (_activeQuiz?['id'] ?? '').toString();
+          if (pollId.isNotEmpty) {
+            _votedPollIds.add(pollId);
+          }
           final isCorrect = res['isCorrect'] as bool;
           final points = res['pointsEarned'] as int;
           messenger.showSnackBar(
@@ -503,6 +618,55 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     // Local reaction animations disabled to optimize performance
   }
 
+  void _confirmLeaveRoom() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.exit_to_app_rounded, color: AppColors.error),
+            SizedBox(width: 10),
+            Text(
+              'Leave Session?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to exit this live session? You can always rejoin using the session code.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Stay',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _socketClient.disconnect();
+              context.go('/');
+            },
+            child: const Text('Leave Room'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_session == null) {
@@ -514,28 +678,81 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final participantName = (_participant?['name'] ?? 'Participant').toString();
+    final sessionTitle = (_session!['title'] ?? 'Live Session').toString();
+    final accessCode = (_session!['access_code'] ?? widget.accessCode)
+        .toString();
 
     return Stack(
       children: [
         Scaffold(
           appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            elevation: 0,
+            titleSpacing: 16,
+            title: Row(
               children: [
-                Text(
-                  (_session!['title'] ?? 'Session').toString(),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.success,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          color: AppColors.success,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  AppStrings.participantTitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        sessionTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'Joined as $participantName • #$accessCode',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white54 : Colors.black54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -543,31 +760,41 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             actions: [
               IconButton(
                 icon: const Icon(
-                  Icons.exit_to_app_rounded,
+                  Icons.logout_rounded,
                   color: AppColors.error,
+                  size: 20,
                 ),
-                tooltip: 'Leave Room',
-                onPressed: () {
-                  _socketClient.disconnect();
-                  context.go('/');
-                },
+                tooltip: 'Leave Session',
+                onPressed: _confirmLeaveRoom,
               ),
             ],
             bottom: TabBar(
               controller: _tabController,
               indicatorColor: AppColors.primary,
-              indicatorSize: TabBarIndicatorSize.label,
+              indicatorWeight: 3,
+              indicatorSize: TabBarIndicatorSize.tab,
               labelColor: AppColors.primary,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              labelStyle: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13,
+              ),
               unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
-              tabs: const [
+              unselectedLabelStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              tabs: [
                 Tab(
-                  icon: Icon(Icons.poll_rounded),
-                  text: AppStrings.livePollsTab,
+                  icon: const Icon(Icons.poll_rounded, size: 20),
+                  text: _activePolls.isNotEmpty
+                      ? 'Live Polls (${_activePolls.length})'
+                      : 'Live Polls',
                 ),
                 Tab(
-                  icon: Icon(Icons.question_answer_rounded),
-                  text: AppStrings.qaTab,
+                  icon: const Icon(Icons.question_answer_rounded, size: 20),
+                  text: _questions.isNotEmpty
+                      ? 'Q&A (${_questions.length})'
+                      : 'Q&A Discussion',
                 ),
               ],
             ),
@@ -601,7 +828,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               _reactionBtn('👏'),
               _reactionBtn('💡'),
               _reactionBtn('🎉'),
-              _reactionBtn('😮'),
+              _reactionBtn('❤️'),
             ],
           ),
         ),
@@ -620,6 +847,125 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     );
   }
 
+  Widget _buildLobbyWaitingState(bool isDark) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Radar Beacon Icon
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.2),
+                    AppColors.primary.withValues(alpha: 0.04),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.sensors_rounded,
+                    size: 38,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.success,
+                    size: 14,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'CONNECTED TO LIVE ROOM',
+                    style: TextStyle(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Waiting for Next Poll',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'The host will launch interactive polls, quizzes, and questions here in real-time. Feel free to cheer with reactions below!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.4,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+            ),
+            const SizedBox(height: 28),
+            // Quick Q&A Button
+            OutlinedButton.icon(
+              onPressed: () {
+                _tabController.animateTo(1);
+              },
+              icon: const Icon(Icons.question_answer_rounded, size: 16),
+              label: const Text('Ask a Question in Q&A'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: BorderSide(
+                  color: AppColors.primary.withValues(alpha: 0.4),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildPollsTabView() {
     if (_activeQuiz != null) {
       return _buildQuizActiveView();
@@ -628,36 +974,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (_activePolls.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.wifi_tethering_off_rounded,
-                size: 72,
-                color: isDark ? Colors.white24 : Colors.black12,
-              ),
-              const SizedBox(height: AppSizes.space16),
-              const Text(
-                AppStrings.noActivePoll,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: AppSizes.space8),
-              Text(
-                AppStrings.noActivePollSub,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildLobbyWaitingState(isDark);
     }
 
     final filteredList = _filteredActivePolls;
@@ -715,9 +1032,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                             borderRadius: BorderRadius.circular(
                               AppSizes.radiusCard,
                             ),
-                            border: Border.all(
-                              color: isDark ? Colors.white12 : Colors.black12,
-                            ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -725,49 +1039,32 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                               Row(
                                 children: [
                                   const Icon(
-                                    Icons.check_circle_outline_rounded,
-                                    size: 18,
+                                    Icons.check_circle_rounded,
                                     color: AppColors.success,
+                                    size: 16,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Answered Polls (${answeredPolls.length})',
-                                    style: TextStyle(
+                                    'Completed Responses (${answeredPolls.length})',
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: isDark
-                                          ? Colors.white70
-                                          : AppColors.textPrimaryLight,
                                     ),
                                   ),
                                 ],
                               ),
-                              Row(
-                                children: [
-                                  Text(
-                                    _showAnsweredPolls ? 'Hide' : 'Show',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    _showAnsweredPolls
-                                        ? Icons.keyboard_arrow_up_rounded
-                                        : Icons.keyboard_arrow_down_rounded,
-                                    color: AppColors.primary,
-                                    size: 20,
-                                  ),
-                                ],
+                              Icon(
+                                _showAnsweredPolls
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                size: 20,
                               ),
                             ],
                           ),
                         ),
                       ),
                       if (_showAnsweredPolls) ...[
-                        const SizedBox(height: AppSizes.space16),
+                        const SizedBox(height: 12),
                         ...answeredPolls.map(
                           (poll) => _buildSingleActivePollCard(poll, isDark),
                         ),
@@ -844,7 +1141,28 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   Widget _buildSingleActivePollCard(Map<String, dynamic> poll, bool isDark) {
     final pollId = (poll['id'] ?? '').toString();
     final title = (poll['title'] ?? 'Live Poll').toString();
+    final type = (poll['type'] ?? 'multiple_choice').toString();
     final hasVoted = _votedPollIds.contains(pollId);
+    final isEditing = _editingPollIds.contains(pollId);
+
+    String typeLabel = 'POLL';
+    IconData typeIcon = Icons.poll_rounded;
+    if (type == 'multiple_choice') {
+      typeLabel = 'MULTIPLE CHOICE';
+      typeIcon = Icons.list_alt_rounded;
+    } else if (type == 'rating') {
+      typeLabel = 'STAR RATING';
+      typeIcon = Icons.star_rate_rounded;
+    } else if (type == 'word_cloud') {
+      typeLabel = 'WORD CLOUD';
+      typeIcon = Icons.cloud_outlined;
+    } else if (type == 'open_text') {
+      typeLabel = 'OPEN TEXT';
+      typeIcon = Icons.text_snippet_outlined;
+    } else if (type == 'ranking') {
+      typeLabel = 'RANKING';
+      typeIcon = Icons.format_list_numbered_rounded;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: AppSizes.space20),
@@ -852,12 +1170,12 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
         color: isDark ? Colors.white.withValues(alpha: 0.035) : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: hasVoted
+          color: (hasVoted && !isEditing)
               ? AppColors.success.withValues(alpha: 0.3)
               : (isDark
                     ? Colors.white.withValues(alpha: 0.1)
                     : Colors.black.withValues(alpha: 0.08)),
-          width: hasVoted ? 1.5 : 1.0,
+          width: (hasVoted && !isEditing) ? 1.5 : 1.0,
         ),
         boxShadow: [
           BoxShadow(
@@ -876,15 +1194,41 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header Tag Bar
-              if (hasVoted)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
+              // Header Tag Bar (Category Type & Answered Badge)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(typeIcon, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          typeLabel,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasVoted && !isEditing)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
+                        horizontal: 10,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.success.withValues(alpha: 0.12),
@@ -914,9 +1258,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                         ],
                       ),
                     ),
-                  ],
-                ),
-              if (hasVoted) const SizedBox(height: 12),
+                ],
+              ),
+              const SizedBox(height: 12),
 
               // Question Title
               Text(
@@ -931,9 +1275,30 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               ),
               const SizedBox(height: 20),
 
-              // Card Content
-              if (hasVoted) ...[
+              // Card Content: Results (with edit option) or Input Form
+              if (hasVoted && !isEditing) ...[
                 _buildPollResultsViewForPoll(poll),
+                const SizedBox(height: 14),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _editingPollIds.add(pollId);
+                      });
+                    },
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: const Text(
+                      'Change My Response',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                    ),
+                  ),
+                ),
               ] else ...[
                 _buildPollFormForPoll(poll),
                 const SizedBox(height: 20),
@@ -963,19 +1328,24 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                       ),
                     ),
                     onPressed: () => _submitVoteForPoll(poll),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Submit Response',
-                          style: TextStyle(
+                          isEditing ? 'Update Response' : 'Submit Response',
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.3,
                           ),
                         ),
-                        SizedBox(width: 8),
-                        Icon(Icons.arrow_forward_rounded, size: 18),
+                        const SizedBox(width: 8),
+                        Icon(
+                          isEditing
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.arrow_forward_rounded,
+                          size: 18,
+                        ),
                       ],
                     ),
                   ),
@@ -987,8 +1357,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       ),
     );
   }
-
-
 
   Widget _buildResultsChart(String type, Map<String, dynamic> results) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1231,140 +1599,235 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     final title = _activeQuiz!['title'] as String? ?? 'Quiz Question';
     final options = _activeQuiz!['options'] as List? ?? [];
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
     final timeColor = _quizTimeRemaining > 10
         ? AppColors.success
         : (_quizTimeRemaining > 5 ? AppColors.warning : AppColors.error);
 
-    Widget timerWidget = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: timeColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-        border: Border.all(color: timeColor.withValues(alpha: 0.3), width: 1.0),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, size: 14, color: timeColor),
-          const SizedBox(width: 6),
-          Text(
-            '$_quizTimeRemaining s',
-            style: TextStyle(
-              color: timeColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(AppSizes.space24),
-      color: AppColors.primary.withValues(alpha: 0.02),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                AppStrings.quizTitle,
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 0.5,
-                ),
+          // Quiz Header Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.purpleAccent.withValues(alpha: isDark ? 0.12 : 0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.purpleAccent.withValues(alpha: 0.3),
               ),
-              timerWidget,
-            ],
-          ),
-          const SizedBox(height: AppSizes.space24),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.4,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.purpleAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.emoji_events_rounded,
+                            color: AppColors.purpleAccent,
+                            size: 16,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'LIVE QUIZ CHALLENGE',
+                          style: TextStyle(
+                            color: AppColors.purpleAccent,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 11,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: timeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: timeColor.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.timer_rounded, size: 14, color: timeColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${_quizTimeRemaining}s left',
+                            style: TextStyle(
+                              color: timeColor,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: (_quizTimeRemaining / 15.0).clamp(0.0, 1.0),
+                    minHeight: 6,
+                    backgroundColor: isDark ? Colors.white10 : Colors.black12,
+                    valueColor: AlwaysStoppedAnimation<Color>(timeColor),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: AppSizes.space32),
+          const SizedBox(height: 20),
+
+          // Question Title
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              height: 1.3,
+              letterSpacing: -0.4,
+              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Answer quickly for higher speed bonus points (up to 1000 pts)',
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white54 : Colors.black54,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 24),
+
           if (_hasAnsweredQuiz) ...[
-            Center(
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.3),
+                ),
+              ),
               child: Column(
                 children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.success,
-                    size: 64,
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.success,
+                      size: 48,
+                    ),
                   ),
-                  const SizedBox(height: AppSizes.space16),
+                  const SizedBox(height: 16),
                   const Text(
-                    AppStrings.answerSubmitted,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    AppStrings.quizWaitResults,
+                    'Answer Submitted!',
                     style: TextStyle(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your answer was recorded. Waiting for the timer to finish and leaderboard reveal.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white60 : Colors.black54,
                     ),
                   ),
                 ],
               ),
             ),
           ] else ...[
-            ...options.map((opt) {
+            ...List.generate(options.length, (idx) {
+              final opt = options[idx];
               final id = (opt['id'] ?? '').toString();
+              final letter = idx < letters.length ? letters[idx] : '${idx + 1}';
+              final label = (opt['optionText'] ?? opt['option_text'] ?? '').toString();
+
               return Container(
-                margin: const EdgeInsets.only(bottom: AppSizes.space16),
+                margin: const EdgeInsets.only(bottom: 12),
                 child: InkWell(
                   onTap: () => _submitQuizAnswer(id),
-                  borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+                  borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
+                      horizontal: 18,
                       vertical: 16,
                     ),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.white.withValues(alpha: 0.03)
-                          : Colors.black.withValues(alpha: 0.02),
-                      borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.white,
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isDark ? Colors.white10 : Colors.black12,
-                        width: 1.0,
+                        color: isDark ? Colors.white12 : Colors.black12,
+                        width: 1.2,
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: AppColors.primary.withValues(
-                            alpha: 0.15,
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.purpleAccent.withValues(alpha: 0.12),
                           ),
-                          child: const Icon(
-                            Icons.star_rounded,
-                            size: 12,
-                            color: AppColors.primary,
+                          child: Center(
+                            child: Text(
+                              letter,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: AppColors.purpleAccent,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Text(
-                            (opt['optionText'] ?? '').toString(),
+                            label,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: isDark
-                                  ? Colors.white
-                                  : AppColors.textPrimaryLight,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : AppColors.textPrimaryLight,
                             ),
                           ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: Colors.grey,
                         ),
                       ],
                     ),
@@ -1696,14 +2159,38 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   void _submitVoteForPoll(Map<String, dynamic> poll) {
     if (_participant == null) return;
     final pollId = (poll['id'] ?? '').toString();
+    final type = (poll['type'] ?? 'multiple_choice').toString();
     final selectedOptions = (_selectedOptionIdsMap[pollId] ?? {}).toList();
     final textCtrl = _textResponseCtrlsMap[pollId];
-    final textResponse = textCtrl?.text ?? '';
+    final textResponse = textCtrl?.text.trim() ?? '';
     final ratingValue = _ratingValuesMap[pollId] ?? 3.0;
     final rankingOptions = _rankingOptionsMap[pollId] ?? [];
 
+    if (type == 'multiple_choice' && selectedOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an option before submitting'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if ((type == 'word_cloud' || type == 'open_text') && textResponse.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your response before submitting'),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _votedPollIds.add(pollId);
+      _editingPollIds.remove(pollId);
     });
     _cacheManager.saveVotedPollId(widget.accessCode, pollId);
 

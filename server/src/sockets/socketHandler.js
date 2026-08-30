@@ -19,6 +19,9 @@ function mapQuestionToCamelCase(row) {
   };
 }
 
+// Map tracking active running quiz countdown intervals by sessionId to prevent overlapping timers on restarts
+const activeQuizTimers = new Map();
+
 export default function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`Socket connected: ${socket.id}`);
@@ -384,12 +387,23 @@ export default function registerSocketHandlers(io) {
     socket.on('start_quiz_timer', async ({ sessionId, pollId, durationSeconds }) => {
       try {
         const roomName = `session:${sessionId}`;
-        let remaining = durationSeconds || 15;
+        let remaining = parseInt(durationSeconds, 10) || 15;
 
-        // Save active state in Redis
+        // Clear any previous running timer for this session to prevent conflicting countdowns on restart
+        if (activeQuizTimers.has(sessionId)) {
+          clearInterval(activeQuizTimers.get(sessionId));
+          activeQuizTimers.delete(sessionId);
+        }
+
+        // Set poll status to active so responses are accepted (preserves existing votes without clearing)
+        await db.query("UPDATE polls SET status = 'active' WHERE id = $1", [pollId]);
+        await db.query("UPDATE sessions SET active_quiz_question_id = $1 WHERE id = $2", [pollId, sessionId]);
+
+        // Save active state in Redis with the new timestamp and duration
+        const now = Date.now();
         await redis.hset(`quiz:active:${sessionId}`, {
           pollId,
-          activatedAt: Date.now(),
+          activatedAt: now,
           timeLimit: remaining,
         });
 
@@ -399,19 +413,45 @@ export default function registerSocketHandlers(io) {
           remaining--;
           if (remaining <= 0) {
             clearInterval(intervalId);
+            if (activeQuizTimers.get(sessionId) === intervalId) {
+              activeQuizTimers.delete(sessionId);
+            }
             io.to(roomName).emit('quiz_timer_end', { pollId });
-            // Unlock and reveal correct answer in poll results
-            await db.query('UPDATE polls SET status = \'locked\' WHERE id = $1', [pollId]);
-            const pollRes = await db.query('SELECT * FROM polls WHERE id = $1', [pollId]);
-            const results = await calculatePollResults(pollRes.rows[0]);
-            io.to(roomName).emit('votes_updated', { pollId, results });
+            // Lock poll and reveal results
+            await db.query("UPDATE polls SET status = 'locked' WHERE id = $1", [pollId]);
+            const pollRes = await db.query("SELECT * FROM polls WHERE id = $1", [pollId]);
+            if (pollRes.rows.length > 0) {
+              const results = await calculatePollResults(pollRes.rows[0]);
+              io.to(roomName).emit('votes_updated', { pollId, results });
+            }
           } else {
             io.to(roomName).emit('quiz_timer_tick', { pollId, remaining });
           }
         }, 1000);
 
+        activeQuizTimers.set(sessionId, intervalId);
+
       } catch (err) {
         console.error('Socket start_quiz_timer error:', err);
+      }
+    });
+
+    socket.on('stop_quiz_timer', async ({ sessionId, pollId }) => {
+      try {
+        const roomName = `session:${sessionId}`;
+        if (activeQuizTimers.has(sessionId)) {
+          clearInterval(activeQuizTimers.get(sessionId));
+          activeQuizTimers.delete(sessionId);
+        }
+        io.to(roomName).emit('quiz_timer_end', { pollId });
+        await db.query("UPDATE polls SET status = 'locked' WHERE id = $1", [pollId]);
+        const pollRes = await db.query("SELECT * FROM polls WHERE id = $1", [pollId]);
+        if (pollRes.rows.length > 0) {
+          const results = await calculatePollResults(pollRes.rows[0]);
+          io.to(roomName).emit('votes_updated', { pollId, results });
+        }
+      } catch (err) {
+        console.error('Socket stop_quiz_timer error:', err);
       }
     });
 

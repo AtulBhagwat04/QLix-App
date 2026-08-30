@@ -10,7 +10,7 @@ class ApiClient {
 
   static String get defaultHost {
     if (kIsWeb) return 'localhost';
-    return '10.109.186.64';
+    return '10.225.134.64';
   }
 
   static String get baseUrl {
@@ -19,7 +19,8 @@ class ApiClient {
       if (ip != null &&
           ip.trim().isNotEmpty &&
           ip.trim() != '10.202.235.64' &&
-          ip.trim() != '10.128.231.64') {
+          ip.trim() != '10.128.231.64' &&
+          ip.trim() != '10.109.186.64') {
         return 'http://${ip.trim()}:3000/api';
       }
     } catch (_) {}

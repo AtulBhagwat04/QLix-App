@@ -946,10 +946,8 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
     final bool showAll = (_currentTab ?? 0) == 1;
     List<dynamic> targetSessions;
     if (!showAll) {
-      targetSessions = sessions
-          .where((s) => s['state'] == 'ended')
-          .take(5)
-          .toList();
+      // Show all recent sessions (active, draft, and ended) on the home tab
+      targetSessions = sessions.take(5).toList();
     } else {
       targetSessions = sessions;
     }
