@@ -13,6 +13,7 @@ function mapQuestionToCamelCase(row) {
     status: row.status,
     upvotesCount: row.upvotes_count,
     isPinned: row.is_pinned,
+    answerText: row.answer_text || null,
     authorName: row.authorName || (row.is_anonymous ? 'Anonymous' : 'Guest'),
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -338,7 +339,7 @@ export default function registerSocketHandlers(io) {
     });
 
     // 7. Change Question Status (Moderation, answering, pinning)
-    socket.on('update_question_status', async ({ sessionId, questionId, status, isPinned }) => {
+    socket.on('update_question_status', async ({ sessionId, questionId, status, isPinned, answerText }) => {
       try {
         const roomName = `session:${sessionId}`;
         
@@ -356,6 +357,14 @@ export default function registerSocketHandlers(io) {
           params.push(isPinned);
           index++;
         }
+        // Store host's written answer text (if provided)
+        if (answerText !== undefined && answerText !== null) {
+          queryParts.push(`answer_text = $${index}`);
+          params.push(answerText.trim() || null);
+          index++;
+        }
+
+        if (queryParts.length === 0) return;
 
         params.push(questionId);
         const updateQuery = `
@@ -468,6 +477,28 @@ export default function registerSocketHandlers(io) {
         io.to(roomName).emit('announcement_received', { announcement: result.rows[0] });
       } catch (err) {
         console.error('Socket send_announcement error:', err);
+      }
+    });
+
+    // 10. Host update session state (draft / active / ended)
+    socket.on('update_session_state', async ({ sessionId, state }) => {
+      try {
+        const sessionRes = await db.query(
+          'UPDATE sessions SET state = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 OR access_code = $2 RETURNING *',
+          [state, sessionId]
+        );
+        if (sessionRes.rows.length === 0) return;
+        const updatedSession = sessionRes.rows[0];
+        const targetSessionId = updatedSession.id;
+        const roomName = `session:${targetSessionId}`;
+
+        io.to(roomName).emit('session_state_changed', {
+          sessionId: targetSessionId,
+          state: updatedSession.state,
+          session: updatedSession,
+        });
+      } catch (err) {
+        console.error('Socket update_session_state error:', err);
       }
     });
 

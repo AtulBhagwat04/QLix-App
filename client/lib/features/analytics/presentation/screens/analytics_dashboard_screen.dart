@@ -14,6 +14,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/error_handler.dart';
 
 import '../../../sessions/domain/repositories/session_repository.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
@@ -97,7 +98,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to load analytics: $e'),
+          content: Text(AppError.from(e, context: 'analytics')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -128,7 +129,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to export CSV: $e'),
+          content: Text(AppError.from(e, context: 'export')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -234,7 +235,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to compile PDF: $e'),
+          content: Text(AppError.from(e, context: 'export')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -2683,7 +2684,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to update status: $e'),
+          content: Text(AppError.from(e)),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -2725,7 +2726,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       setState(() => _isSavingSettings = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to update settings: $e'),
+          content: Text(AppError.from(e)),
           backgroundColor: Colors.redAccent,
         ),
       );

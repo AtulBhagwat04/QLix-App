@@ -37,6 +37,7 @@ final GoRouter appRouter = GoRouter(
       '/dashboard',
       '/session/create',
       '/session/control',
+      '/live',
       '/analytics',
     ];
 
@@ -84,6 +85,13 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/session/control/:id',
+      builder: (context, state) {
+        final sessionId = state.pathParameters['id']!;
+        return HostLiveControlScreen(sessionId: sessionId);
+      },
+    ),
+    GoRoute(
+      path: '/live/:id',
       builder: (context, state) {
         final sessionId = state.pathParameters['id']!;
         return HostLiveControlScreen(sessionId: sessionId);

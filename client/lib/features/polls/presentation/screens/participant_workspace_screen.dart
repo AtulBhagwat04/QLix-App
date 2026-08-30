@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/network/socket_client.dart';
@@ -8,6 +9,7 @@ import '../../../../core/storage/cache_manager.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../domain/repositories/poll_repository.dart';
 import '../../../quiz/domain/repositories/quiz_repository.dart';
@@ -85,7 +87,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
 
   // Q&A controller
   final _questionInputCtrl = TextEditingController();
-  bool _qaAnonymous = true;
 
   // Per-poll input state maps
   final Map<String, Set<String>> _selectedOptionIdsMap = {};
@@ -101,6 +102,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
   StreamSubscription? _qaUpvotedSub;
   StreamSubscription? _quizSub;
   StreamSubscription? _announcementSub;
+  StreamSubscription? _sessionStateSub;
 
   @override
   void initState() {
@@ -124,6 +126,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     _qaUpvotedSub?.cancel();
     _quizSub?.cancel();
     _announcementSub?.cancel();
+    _sessionStateSub?.cancel();
     super.dispose();
   }
 
@@ -350,18 +353,70 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
         final emoji = (data['emoji'] ?? '').toString();
         _triggerLocalReaction(emoji);
       });
+
+      _sessionStateSub = _socketClient.sessionStateStream.listen((data) {
+        final newState = (data['state'] ?? '').toString();
+        if (!mounted || newState.isEmpty) return;
+        setState(() {
+          if (_session != null) {
+            _session!['state'] = newState;
+          }
+        });
+        if (newState == 'active') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text('The host has started the session!'),
+                ],
+              ),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else if (newState == 'ended') {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(
+                    Icons.stop_circle_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  SizedBox(width: 8),
+                  Text('This session has ended.'),
+                ],
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      });
     } catch (e) {
       if (mounted) {
-        final errorMsg = e
-            .toString()
-            .replaceAll('Exception: ', '')
-            .replaceAll('DioException [bad response]: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to initialize session: $errorMsg'),
+            content: Text(AppError.from(e, context: 'join')),
             backgroundColor: AppColors.error,
           ),
         );
+        if (_session == null) {
+          Future.delayed(const Duration(milliseconds: 700), () {
+            if (mounted && context.canPop()) {
+              context.pop();
+            } else if (mounted) {
+              context.go('/join');
+            }
+          });
+        }
       }
     }
   }
@@ -503,6 +558,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     final text = _questionInputCtrl.text.trim();
     if (text.isEmpty || _session == null || _participant == null) return;
 
+    final participantName = (_participant?['name']?.toString() ?? 'Guest');
     // Instant Q&A Optimistic update
     final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
     final tempQ = {
@@ -510,13 +566,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       'sessionId': (_session?['id'] ?? '').toString(),
       'participantId': (_participant?['id'] ?? '').toString(),
       'text': text,
-      'isAnonymous': _qaAnonymous,
+      'isAnonymous': false,
       'status': 'pending',
       'upvotesCount': 0,
       'isPinned': false,
-      'authorName': _qaAnonymous
-          ? 'Anonymous'
-          : (_participant?['name']?.toString() ?? 'Guest'),
+      'authorName': participantName,
       'createdAt': DateTime.now().toIso8601String(),
       'isOptimistic': true, // visual loader tag
     };
@@ -529,7 +583,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       sessionId: (_session?['id'] ?? '').toString(),
       participantId: (_participant?['id'] ?? '').toString(),
       text: text,
-      isAnonymous: _qaAnonymous,
+      isAnonymous: false,
     );
 
     _questionInputCtrl.clear();
@@ -602,7 +656,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           });
           messenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to submit answer: $e'),
+              content: Text(AppError.from(e, context: 'submit')),
               backgroundColor: AppColors.error,
             ),
           );
@@ -683,121 +737,75 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
     final accessCode = (_session!['access_code'] ?? widget.accessCode)
         .toString();
 
+    final sessionState = (_session!['state'] ?? 'draft').toString();
+    final isDraft = sessionState != 'active' && sessionState != 'ended';
+    final isEnded = sessionState == 'ended';
+
+    // ── 1. DRAFT / WAITING LOBBY STATE ──────────────────────────────────────
+    if (isDraft) {
+      return Stack(
+        children: [
+          Scaffold(
+            appBar: _buildWorkspaceAppBar(
+              context: context,
+              isDark: isDark,
+              sessionTitle: sessionTitle,
+              accessCode: accessCode,
+              participantName: participantName,
+              status: 'WAITING',
+              isLive: false,
+              hasTabs: false,
+            ),
+            body: _buildSessionWaitingLobby(
+              isDark,
+              sessionTitle,
+              accessCode,
+              participantName,
+            ),
+            bottomNavigationBar: _buildReactionTool(),
+          ),
+        ],
+      );
+    }
+
+    // ── 2. SESSION ENDED STATE ──────────────────────────────────────────────
+    if (isEnded) {
+      return Stack(
+        children: [
+          Scaffold(
+            appBar: _buildWorkspaceAppBar(
+              context: context,
+              isDark: isDark,
+              sessionTitle: sessionTitle,
+              accessCode: accessCode,
+              participantName: participantName,
+              status: 'ENDED',
+              isLive: false,
+              hasTabs: false,
+            ),
+            body: _buildSessionEndedScreen(
+              isDark,
+              sessionTitle,
+              participantName,
+            ),
+          ),
+        ],
+      );
+    }
+
+    // ── 3. ACTIVE LIVE SESSION STATE ────────────────────────────────────────
     return Stack(
       children: [
         Scaffold(
-          appBar: AppBar(
-            elevation: 0,
-            titleSpacing: 16,
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.success,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        'LIVE',
-                        style: TextStyle(
-                          color: AppColors.success,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        sessionTitle,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'Joined as $participantName • #$accessCode',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white54 : Colors.black54,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(
-                  Icons.logout_rounded,
-                  color: AppColors.error,
-                  size: 20,
-                ),
-                tooltip: 'Leave Session',
-                onPressed: _confirmLeaveRoom,
-              ),
-            ],
-            bottom: TabBar(
-              controller: _tabController,
-              indicatorColor: AppColors.primary,
-              indicatorWeight: 3,
-              indicatorSize: TabBarIndicatorSize.tab,
-              labelColor: AppColors.primary,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13,
-              ),
-              unselectedLabelColor: isDark ? Colors.white60 : Colors.black54,
-              unselectedLabelStyle: const TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-              tabs: [
-                Tab(
-                  icon: const Icon(Icons.poll_rounded, size: 20),
-                  text: _activePolls.isNotEmpty
-                      ? 'Live Polls (${_activePolls.length})'
-                      : 'Live Polls',
-                ),
-                Tab(
-                  icon: const Icon(Icons.question_answer_rounded, size: 20),
-                  text: _questions.isNotEmpty
-                      ? 'Q&A (${_questions.length})'
-                      : 'Q&A Discussion',
-                ),
-              ],
-            ),
+          appBar: _buildWorkspaceAppBar(
+            context: context,
+            isDark: isDark,
+            sessionTitle: sessionTitle,
+            accessCode: accessCode,
+            participantName: participantName,
+            status: 'LIVE',
+            isLive: true,
+            hasTabs: true,
           ),
           body: TabBarView(
             controller: _tabController,
@@ -806,6 +814,469 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           bottomNavigationBar: _buildReactionTool(),
         ),
       ],
+    );
+  }
+
+  PreferredSizeWidget _buildWorkspaceAppBar({
+    required BuildContext context,
+    required bool isDark,
+    required String sessionTitle,
+    required String accessCode,
+    required String participantName,
+    required String status,
+    required bool isLive,
+    required bool hasTabs,
+  }) {
+    final statusColor = isLive
+        ? AppColors.success
+        : (status == 'WAITING' ? Colors.amber : Colors.grey);
+
+    return AppBar(
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      titleSpacing: 0,
+      leading: Padding(
+        padding: const EdgeInsets.only(left: 14),
+        child: Center(
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: isLive
+                    ? AppColors.primaryGradient
+                    : [
+                        statusColor.withValues(alpha: 0.7),
+                        statusColor.withValues(alpha: 0.9),
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isLive ? AppColors.primary : statusColor).withValues(
+                    alpha: 0.25,
+                  ),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              participantName.isNotEmpty
+                  ? participantName[0].toUpperCase()
+                  : 'P',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ),
+      ),
+      title: Padding(
+        padding: const EdgeInsets.only(left: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              sessionTitle,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 3),
+            Row(
+              children: [
+                // Status indicator pill
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.25),
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 5,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                          color: statusColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Copyable PIN
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: accessCode));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Session code copied!'),
+                        duration: Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '#$accessCode',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white70 : Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          Icons.copy_rounded,
+                          size: 10,
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        Container(
+          margin: const EdgeInsets.only(right: 12),
+          decoration: BoxDecoration(
+            color: AppColors.error.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: IconButton(
+            icon: const Icon(
+              Icons.logout_rounded,
+              color: AppColors.error,
+              size: 18,
+            ),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Leave Session',
+            onPressed: _confirmLeaveRoom,
+          ),
+        ),
+      ],
+      bottom: hasTabs
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark
+                          ? Colors.white10
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: AppColors.primary,
+                  indicatorWeight: 2.5,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelColor: AppColors.primary,
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    letterSpacing: -0.2,
+                  ),
+                  unselectedLabelColor: isDark
+                      ? Colors.white60
+                      : Colors.black54,
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  tabs: [
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.poll_rounded, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Live Polls'),
+                          if (_activePolls.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_activePolls.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Tab(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.question_answer_rounded, size: 18),
+                          const SizedBox(width: 6),
+                          const Text('Q&A'),
+                          if (_questions.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.purpleAccent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_questions.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Divider(
+                height: 1,
+                color: isDark
+                    ? Colors.white10
+                    : Colors.black.withValues(alpha: 0.06),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSessionWaitingLobby(
+    bool isDark,
+    String sessionTitle,
+    String accessCode,
+    String participantName,
+  ) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Clean minimal icon
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.amber.withValues(alpha: 0.12),
+              ),
+              child: const Icon(
+                Icons.hourglass_top_rounded,
+                size: 30,
+                color: Colors.amber,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Waiting for host to start...',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Polls and Q&A will appear here automatically.',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            // Minimal pill tag
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 14,
+                    color: isDark ? Colors.white70 : Colors.black54,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    participantName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '•',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '#$accessCode',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSessionEndedScreen(
+    bool isDark,
+    String sessionTitle,
+    String participantName,
+  ) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.success.withValues(alpha: 0.12),
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 32,
+                color: AppColors.success,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Session Ended',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Thank you for participating!',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? Colors.white60 : Colors.black54,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 42,
+              child: OutlinedButton.icon(
+                onPressed: _confirmLeaveRoom,
+                style: OutlinedButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.logout_rounded, size: 16),
+                label: const Text(
+                  'Leave Session',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1614,7 +2085,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.purpleAccent.withValues(alpha: isDark ? 0.12 : 0.08),
+              color: AppColors.purpleAccent.withValues(
+                alpha: isDark ? 0.12 : 0.08,
+              ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: AppColors.purpleAccent.withValues(alpha: 0.3),
@@ -1631,7 +2104,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: AppColors.purpleAccent.withValues(alpha: 0.2),
+                            color: AppColors.purpleAccent.withValues(
+                              alpha: 0.2,
+                            ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Icon(
@@ -1653,11 +2128,16 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: timeColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: timeColor.withValues(alpha: 0.4)),
+                        border: Border.all(
+                          color: timeColor.withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1718,7 +2198,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
             Container(
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.04)
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: AppColors.success.withValues(alpha: 0.3),
@@ -1764,7 +2246,8 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
               final opt = options[idx];
               final id = (opt['id'] ?? '').toString();
               final letter = idx < letters.length ? letters[idx] : '${idx + 1}';
-              final label = (opt['optionText'] ?? opt['option_text'] ?? '').toString();
+              final label = (opt['optionText'] ?? opt['option_text'] ?? '')
+                  .toString();
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -1787,7 +2270,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.2 : 0.03,
+                          ),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -1800,7 +2285,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                           height: 32,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: AppColors.purpleAccent.withValues(alpha: 0.12),
+                            color: AppColors.purpleAccent.withValues(
+                              alpha: 0.12,
+                            ),
                           ),
                           child: Center(
                             child: Text(
@@ -1820,7 +2307,9 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                             style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                              color: isDark
+                                  ? Colors.white
+                                  : AppColors.textPrimaryLight,
                             ),
                           ),
                         ),
@@ -2247,7 +2736,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                   controller: _questionInputCtrl,
                   decoration: const InputDecoration(
                     hintText: AppStrings.askQuestionHint,
-                    prefixIcon: Icon(Icons.question_mark_rounded),
                   ),
                 ),
               ),
@@ -2261,34 +2749,6 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                   icon: const Icon(Icons.send_rounded, color: Colors.white),
                   onPressed: _submitQuestion,
                 ),
-              ),
-            ],
-          ),
-        ),
-        // Filters
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSizes.space16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(
-                AppStrings.postAnonymously,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Switch(
-                value: _qaAnonymous,
-                activeThumbColor: AppColors.primary,
-                onChanged: (val) {
-                  setState(() {
-                    _qaAnonymous = val;
-                  });
-                },
               ),
             ],
           ),
@@ -2334,125 +2794,231 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                       color: isPinned
                           ? AppColors.primary.withValues(alpha: 0.06)
                           : (isAnswered
-                                ? (isDark ? Colors.black12 : Colors.grey[50])
+                                ? AppColors.success.withValues(alpha: 0.04)
                                 : null),
                       margin: const EdgeInsets.only(bottom: AppSizes.space12),
                       shape: RoundedRectangleBorder(
                         side: BorderSide(
                           color: isPinned
                               ? AppColors.primary.withValues(alpha: 0.3)
+                              : isAnswered
+                              ? AppColors.success.withValues(alpha: 0.3)
                               : (isDark ? Colors.white10 : Colors.black12),
-                          width: isPinned ? 1.5 : 1.0,
+                          width: (isPinned || isAnswered) ? 1.5 : 1.0,
                         ),
                         borderRadius: BorderRadius.circular(
                           AppSizes.radiusCard,
                         ),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 6,
-                        ),
-                        title: Row(
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (isPinned) ...[
-                              const Icon(
-                                Icons.push_pin,
-                                color: Colors.orange,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            Expanded(
-                              child: Text(
-                                text,
-                                style: TextStyle(
-                                  decoration: isAnswered
-                                      ? TextDecoration.lineThrough
-                                      : null,
-                                  fontWeight: isPinned
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isAnswered
-                                      ? Colors.grey
-                                      : (isOptimistic
-                                            ? (isDark
-                                                  ? Colors.white54
-                                                  : Colors.black54)
-                                            : (isDark
-                                                  ? Colors.white
-                                                  : Colors.black87)),
+                            // Question header row
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isPinned) ...[
+                                  const Icon(
+                                    Icons.push_pin,
+                                    color: Colors.orange,
+                                    size: 15,
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Expanded(
+                                  child: Text(
+                                    text,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                if (isOptimistic)
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8),
+                                    child: SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                            if (isOptimistic) ...[
-                              const SizedBox(width: 8),
-                              const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
+                            const SizedBox(height: 8),
+                            // Author & status row
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 8,
+                                  backgroundColor: AppColors.primary.withValues(
+                                    alpha: 0.2,
+                                  ),
+                                  child: Text(
+                                    author.isNotEmpty
+                                        ? author[0].toUpperCase()
+                                        : 'A',
+                                    style: const TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'By $author • ${isOptimistic
+                                        ? 'Sending...'
+                                        : isAnswered
+                                        ? ''
+                                        : 'Active'}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                if (isAnswered)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: const [
+                                        Icon(
+                                          Icons.check_circle_rounded,
+                                          color: AppColors.success,
+                                          size: 11,
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'ANSWERED',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.success,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                // Upvote button
+                                if (!isAnswered) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: isOptimistic
+                                        ? null
+                                        : () =>
+                                              _upvoteQuestion(qId, hasUpvoted),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          hasUpvoted
+                                              ? Icons.thumb_up_rounded
+                                              : Icons.thumb_up_outlined,
+                                          color: hasUpvoted
+                                              ? AppColors.primary
+                                              : Colors.grey,
+                                          size: 15,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '$upvotes',
+                                          style: TextStyle(
+                                            color: hasUpvoted
+                                                ? AppColors.primary
+                                                : Colors.grey,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            // Host answer section
+                            if (isAnswered) ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: AppColors.success.withValues(
+                                      alpha: 0.2,
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: const [
+                                        Icon(
+                                          Icons.record_voice_over_rounded,
+                                          color: AppColors.success,
+                                          size: 13,
+                                        ),
+                                        SizedBox(width: 6),
+                                        Text(
+                                          'Host\'s Answer',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.success,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      (q['answerText'] as String?)
+                                                  ?.isNotEmpty ==
+                                              true
+                                          ? q['answerText'] as String
+                                          : 'This question was addressed verbally.',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.black87,
+                                        fontStyle:
+                                            (q['answerText'] as String?)
+                                                    ?.isNotEmpty ==
+                                                true
+                                            ? FontStyle.normal
+                                            : FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 8,
-                                backgroundColor: AppColors.primary.withValues(
-                                  alpha: 0.2,
-                                ),
-                                child: Text(
-                                  author.isNotEmpty
-                                      ? author[0].toUpperCase()
-                                      : 'A',
-                                  style: const TextStyle(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'By $author • ${isAnswered
-                                    ? 'ANSWERED'
-                                    : isOptimistic
-                                    ? 'Sending...'
-                                    : 'Active'}',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        trailing: TextButton.icon(
-                          onPressed: isOptimistic
-                              ? null
-                              : () => _upvoteQuestion(qId, hasUpvoted),
-                          icon: Icon(
-                            hasUpvoted
-                                ? Icons.thumb_up_rounded
-                                : Icons.thumb_up_outlined,
-                            color: AppColors.primary,
-                            size: 16,
-                          ),
-                          label: Text(
-                            '$upvotes',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
                         ),
                       ),
                     );

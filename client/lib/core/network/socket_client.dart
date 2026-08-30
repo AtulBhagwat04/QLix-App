@@ -55,6 +55,8 @@ class SocketClient {
       StreamController<Map<String, dynamic>>.broadcast();
   final _announcementController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _sessionStateController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>?> get pollActivationStream =>
@@ -72,6 +74,8 @@ class SocketClient {
       _quizTimerController.stream;
   Stream<Map<String, dynamic>> get announcementStream =>
       _announcementController.stream;
+  Stream<Map<String, dynamic>> get sessionStateStream =>
+      _sessionStateController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -127,7 +131,7 @@ class SocketClient {
       _questionCreatedController.add(Map<String, dynamic>.from(data as Map));
     });
 
-    _socket!.on('question_status_updated', (data) {
+    _socket!.on('question_status_changed', (data) {
       _questionStatusController.add(Map<String, dynamic>.from(data as Map));
     });
 
@@ -164,6 +168,12 @@ class SocketClient {
       _announcementController.add(Map<String, dynamic>.from(data as Map));
     });
 
+    _socket!.on('session_state_changed', (data) {
+      if (data != null) {
+        _sessionStateController.add(Map<String, dynamic>.from(data as Map));
+      }
+    });
+
     _socket!.connect();
   }
 
@@ -194,10 +204,10 @@ class SocketClient {
     _socket?.emit('submit_vote', {
       'pollId': pollId,
       'participantId': participantId,
-      'optionIds': optionIds ?? [],
+      'optionIds': optionIds,
       'textResponse': textResponse,
       'ratingValue': ratingValue,
-      'rankingIds': rankingIds ?? [],
+      'rankingIds': rankingIds,
     });
   }
 
@@ -205,7 +215,7 @@ class SocketClient {
     required String sessionId,
     required String participantId,
     required String text,
-    required bool isAnonymous,
+    bool isAnonymous = false,
   }) {
     _socket?.emit('submit_question', {
       'sessionId': sessionId,
@@ -216,7 +226,7 @@ class SocketClient {
   }
 
   void upvoteQuestion({
-    required String sessionId,
+    String? sessionId,
     required String questionId,
     required String participantId,
   }) {
@@ -232,12 +242,14 @@ class SocketClient {
     required String questionId,
     String? status,
     bool? isPinned,
+    String? answerText,
   }) {
     _socket?.emit('update_question_status', {
       'sessionId': sessionId,
       'questionId': questionId,
       'status': status,
       'isPinned': isPinned,
+      'answerText': answerText,
     });
   }
 
@@ -272,6 +284,13 @@ class SocketClient {
     });
   }
 
+  void updateSessionState(String sessionId, String state) {
+    _socket?.emit('update_session_state', {
+      'sessionId': sessionId,
+      'state': state,
+    });
+  }
+
   void dispose() {
     disconnect();
     _connectionController.close();
@@ -283,5 +302,6 @@ class SocketClient {
     _reactionController.close();
     _quizTimerController.close();
     _announcementController.close();
+    _sessionStateController.close();
   }
 }

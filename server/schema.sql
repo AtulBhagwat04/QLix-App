@@ -112,6 +112,7 @@ CREATE TABLE questions (
     status question_status DEFAULT 'pending',
     upvotes_count INT DEFAULT 0,
     is_pinned BOOLEAN DEFAULT false,
+    answer_text TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

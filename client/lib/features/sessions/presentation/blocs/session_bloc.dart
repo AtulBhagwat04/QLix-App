@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/repositories/session_repository.dart';
+import '../../../../core/utils/error_handler.dart';
 
 // Events
 abstract class SessionEvent extends Equatable {
@@ -159,7 +160,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       list = await sessionRepository.getSessions();
     } catch (e) {
       isOffline = true;
-      errorMessage = e.toString().replaceAll('Exception: ', '');
+      errorMessage = AppError.from(e, context: 'load');
     }
 
     try {
@@ -189,7 +190,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       );
       emit(SessionCreateSuccess(session));
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(SessionFailure(AppError.from(e, context: 'create')));
     }
   }
 
@@ -209,7 +210,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       final participant = Map<String, dynamic>.from(data['participant'] as Map);
       emit(SessionJoinSuccess(session, participant));
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(SessionFailure(AppError.from(e, context: 'join')));
     }
   }
 
@@ -224,7 +225,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       );
       emit(SessionVerifySuccess(session));
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(SessionFailure(AppError.from(e, context: 'join')));
     }
   }
 
@@ -236,7 +237,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       await sessionRepository.updateSession(event.sessionId, event.body);
       add(LoadSessions());
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(SessionFailure(AppError.from(e)));
     }
   }
 
@@ -248,7 +249,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       await sessionRepository.deleteSession(event.sessionId);
       add(LoadSessions());
     } catch (e) {
-      emit(SessionFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(SessionFailure(AppError.from(e)));
     }
   }
 }

@@ -18,6 +18,8 @@ const io = new Server(server, {
   },
 });
 
+app.set('io', io);
+
 // Configure horizontal scaling adapter via Redis Pub/Sub
 try {
   const pubClient = createRedisClient();

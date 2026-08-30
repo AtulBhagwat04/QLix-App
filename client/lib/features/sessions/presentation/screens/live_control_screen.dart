@@ -7,6 +7,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../../quiz/domain/repositories/quiz_repository.dart';
@@ -72,7 +73,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
 
   Future<void> _loadInitialData() async {
     try {
-      final session = await sl<SessionRepository>().getSessionDetails(
+      var session = await sl<SessionRepository>().getSessionDetails(
         widget.sessionId,
       );
       final polls = await sl<PollRepository>().getSessionPolls(
@@ -83,6 +84,18 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       );
 
       if (!mounted) return;
+
+      if (session['state'] == 'draft') {
+        try {
+          final updatedSession = await sl<SessionRepository>().updateSession(
+            widget.sessionId,
+            {'state': 'active'},
+          );
+          session = updatedSession;
+        } catch (_) {
+          // Ignore failure and continue with existing session data
+        }
+      }
 
       setState(() {
         _session = session;
@@ -163,7 +176,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error loading control panel: $e'),
+          content: Text(AppError.from(e, context: 'load')),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -206,7 +219,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Failed to end poll: $e')));
+      ).showSnackBar(SnackBar(
+        content: Text(AppError.from(e, context: 'poll')),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
@@ -228,7 +245,48 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to lock poll: $e'),
+          content: Text(AppError.from(e, context: 'poll')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _changeSessionState(String newState) async {
+    if (_session == null) return;
+    try {
+      final updated = await sl<SessionRepository>().updateSession(
+        widget.sessionId,
+        {'state': newState},
+      );
+      _socketClient.updateSessionState(widget.sessionId, newState);
+      if (!mounted) return;
+      setState(() {
+        _session = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newState == 'active'
+                ? 'Session is now LIVE! Participants can interact.'
+                : newState == 'draft'
+                    ? 'Session is in WAITING mode. Participants see waiting lobby.'
+                    : 'Session has been ENDED.',
+          ),
+          backgroundColor: newState == 'active'
+              ? AppColors.success
+              : newState == 'draft'
+                  ? Colors.amber[700]
+                  : AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppError.from(e)),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -238,11 +296,152 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
 
   void _updateQuestionStatus(String questionId, String status) {
     if (_session == null) return;
-    _socketClient.updateQuestionStatus(
-      sessionId: _session!['id'] as String,
-      questionId: questionId,
-      status: status,
-    );
+    if (status == 'answered') {
+      _showAnswerDialog(questionId);
+    } else {
+      _socketClient.updateQuestionStatus(
+        sessionId: _session!['id'] as String,
+        questionId: questionId,
+        status: status,
+      );
+    }
+  }
+
+  void _showAnswerDialog(String questionId) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final answerCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.success,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Mark as Answered',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Optionally provide a written answer that participants will see.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: answerCtrl,
+                  maxLines: 3,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Type your answer here... (optional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.grey[50],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          // Mark answered without a text reply
+                          _socketClient.updateQuestionStatus(
+                            sessionId: _session!['id'] as String,
+                            questionId: questionId,
+                            status: 'answered',
+                          );
+                        },
+                        child: const Text('Mark Without Reply'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 16),
+                        label: const Text(
+                          'Send Answer',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _socketClient.updateQuestionStatus(
+                            sessionId: _session!['id'] as String,
+                            questionId: questionId,
+                            status: 'answered',
+                            answerText: answerCtrl.text.trim().isEmpty
+                                ? null
+                                : answerCtrl.text.trim(),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() => answerCtrl.dispose());
   }
 
   void _toggleQuestionPin(String questionId, bool currentPin) {
@@ -469,7 +668,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
           if (!mounted) return;
           messenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to start quiz: $e'),
+              content: Text(AppError.from(e, context: 'quiz')),
               backgroundColor: AppColors.error,
               behavior: SnackBarBehavior.floating,
             ),
@@ -1166,7 +1365,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   messenger.showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Failed to create poll: $e',
+                                        AppError.from(e, context: 'poll'),
                                       ),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
@@ -1750,7 +1949,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   messenger.showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Failed to create quiz: $e',
+                                        AppError.from(e, context: 'quiz'),
                                       ),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
@@ -2060,6 +2259,95 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
             tooltip: 'Show Session QR Code',
             onPressed: () => _showQrDialog(context, code),
           ),
+          PopupMenuButton<String>(
+            icon: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: (_session?['state'] == 'draft'
+                        ? Colors.amber
+                        : _session?['state'] == 'ended'
+                            ? Colors.grey
+                            : AppColors.success)
+                    .withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: (_session?['state'] == 'draft'
+                          ? Colors.amber
+                          : _session?['state'] == 'ended'
+                              ? Colors.grey
+                              : AppColors.success)
+                      .withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _session?['state'] == 'draft'
+                          ? Colors.amber
+                          : _session?['state'] == 'ended'
+                              ? Colors.grey
+                              : AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    (_session?['state'] ?? 'active').toString().toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: _session?['state'] == 'draft'
+                          ? Colors.amber
+                          : _session?['state'] == 'ended'
+                              ? Colors.grey
+                              : AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.arrow_drop_down_rounded, size: 14),
+                ],
+              ),
+            ),
+            tooltip: 'Change Session Status',
+            onSelected: _changeSessionState,
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'active',
+                child: Row(
+                  children: [
+                    Icon(Icons.play_circle_fill_rounded, color: AppColors.success, size: 18),
+                    SizedBox(width: 8),
+                    Text('Set Active (Live)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'draft',
+                child: Row(
+                  children: [
+                    Icon(Icons.hourglass_top_rounded, color: Colors.amber, size: 18),
+                    SizedBox(width: 8),
+                    Text('Set Waiting (Draft)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'ended',
+                child: Row(
+                  children: [
+                    Icon(Icons.stop_circle_rounded, color: AppColors.error, size: 18),
+                    SizedBox(width: 8),
+                    Text('End Session'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
         bottom: TabBar(
           controller: _tabController,

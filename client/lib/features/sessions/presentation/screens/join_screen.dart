@@ -12,6 +12,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../blocs/session_bloc.dart';
 
 class ParticipantJoinScreen extends StatefulWidget {
@@ -169,10 +170,15 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                 if (msg.contains('not found') ||
                     msg.contains('404') ||
                     msg.contains('invalid')) {
-                  friendlyMessage = 'Invalid session code';
+                  friendlyMessage = 'Invalid session code. Please double-check and try again.';
                 } else if (msg.contains('ended') || msg.contains('expired')) {
                   friendlyMessage =
                       'This session has already ended. Ask your host for a new code.';
+                } else if (msg.contains('not started') ||
+                    msg.contains('not active') ||
+                    msg.contains('wait for the host')) {
+                  friendlyMessage =
+                      'This session hasn\'t started yet. Please wait for the host to activate it.';
                 } else if (msg.contains('connection') ||
                     msg.contains('network') ||
                     msg.contains('timeout')) {
@@ -936,7 +942,7 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
       }
     } catch (e) {
       setState(() {
-        _errorMessage = "Failed to scan image: $e";
+        _errorMessage = AppError.from(e, context: 'scan');
       });
     }
 
@@ -1560,10 +1566,16 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
   void _submit() {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      widget.onJoin('Anonymous', true);
-    } else {
-      widget.onJoin(name, false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your name to join the session.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _focusNode.requestFocus();
+      return;
     }
+    widget.onJoin(name, false);
     Navigator.pop(context);
   }
 
@@ -1622,10 +1634,10 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
           },
           child: isAnonymous
               ? const Icon(
-                  Icons.visibility_off_rounded,
+                  Icons.person_rounded,
                   color: Colors.white,
                   size: 32,
-                  key: ValueKey('anonymous_avatar'),
+                  key: ValueKey('empty_avatar'),
                 )
               : Text(
                   initials,
@@ -1695,7 +1707,7 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'This name will be visible to the host and other participants.',
+              'Enter your name to identify yourself to the host.',
               style: TextStyle(
                 color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
                 fontSize: 13,
@@ -1748,7 +1760,7 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
             ),
             const SizedBox(height: 20),
             _AnimatedScaleButton(
-              onPressed: _submit,
+              onPressed: _isEmpty ? null : _submit,
               child: Container(
                 height: 50,
                 decoration: BoxDecoration(
@@ -1771,17 +1783,13 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
                   ],
                 ),
                 alignment: Alignment.center,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 150),
-                  child: Text(
-                    _isEmpty ? 'Join Anonymously' : 'Join Session',
-                    key: ValueKey<bool>(_isEmpty),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
+                child: Text(
+                  'Join Session',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
