@@ -1416,7 +1416,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                 _tabController.animateTo(1);
               },
               icon: const Icon(Icons.question_answer_rounded, size: 16),
-              label: const Text('Ask a Question in Q&A'),
+              label: const Text('Ask a Question'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: BorderSide(
@@ -1759,7 +1759,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                     },
                     icon: const Icon(Icons.edit_note_rounded, size: 16),
                     label: const Text(
-                      'Change My Response',
+                      'Edit Response',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
@@ -1803,7 +1803,7 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          isEditing ? 'Update Response' : 'Submit Response',
+                          isEditing ? 'Update' : 'Submit',
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,

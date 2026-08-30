@@ -217,13 +217,13 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(
-        content: Text(AppError.from(e, context: 'poll')),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppError.from(e, context: 'poll')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -271,14 +271,14 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
             newState == 'active'
                 ? 'Session is now LIVE! Participants can interact.'
                 : newState == 'draft'
-                    ? 'Session is in WAITING mode. Participants see waiting lobby.'
-                    : 'Session has been ENDED.',
+                ? 'Session is in WAITING mode. Participants see waiting lobby.'
+                : 'Session has been ENDED.',
           ),
           backgroundColor: newState == 'active'
               ? AppColors.success
               : newState == 'draft'
-                  ? Colors.amber[700]
-                  : AppColors.error,
+              ? Colors.amber[700]
+              : AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -402,7 +402,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                             status: 'answered',
                           );
                         },
-                        child: const Text('Mark Without Reply'),
+                        child: const Text('Mark Answered'),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -418,7 +418,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                         ),
                         icon: const Icon(Icons.send_rounded, size: 16),
                         label: const Text(
-                          'Send Answer',
+                          'Send',
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         onPressed: () {
@@ -769,6 +769,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     final titleCtrl = TextEditingController();
     String type = 'multiple_choice';
     final optCtrls = [TextEditingController(), TextEditingController()];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
     showModalBottomSheet(
       context: context,
@@ -779,88 +780,80 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            final screenHeight = MediaQuery.of(context).size.height;
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
             final pollTypes = [
               {
                 'value': 'multiple_choice',
-                'label': 'Multiple\nChoice',
+                'label': 'MCQ',
                 'icon': Icons.list_alt_rounded,
                 'color': AppColors.primary,
               },
               {
                 'value': 'word_cloud',
-                'label': 'Word\nCloud',
+                'label': 'Word Cloud',
                 'icon': Icons.cloud_rounded,
                 'color': const Color(0xFF06B6D4),
               },
               {
                 'value': 'rating',
-                'label': 'Star\nRating',
+                'label': 'Rating',
                 'icon': Icons.star_rounded,
-                'color': Colors.amber,
+                'color': const Color(0xFFF59E0B),
               },
               {
                 'value': 'open_text',
-                'label': 'Open\nText',
+                'label': 'Open Text',
                 'icon': Icons.notes_rounded,
-                'color': AppColors.success,
+                'color': const Color(0xFF10B981),
               },
               {
                 'value': 'ranking',
-                'label': 'Ranking\nList',
+                'label': 'Ranking',
                 'icon': Icons.sort_rounded,
                 'color': AppColors.purpleAccent,
               },
             ];
 
             return Container(
-              height: screenHeight * 0.92,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
+              ),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1B2E) : Colors.white,
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
+                  top: Radius.circular(24),
                 ),
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Drag Handle
                   const SizedBox(height: 12),
                   Container(
-                    width: 40,
+                    width: 36,
                     height: 4,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white24 : Colors.black12,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
 
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              const Text(
-                                'Create Live Poll',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                            ],
-                          ),
+                  // Centered Header
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Center(
+                      child: Text(
+                        'Create Poll',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
                         ),
-                      ],
+                      ),
                     ),
                   ),
-
-                  const SizedBox(height: 12),
                   Divider(
                     height: 1,
                     color: isDark
@@ -868,53 +861,53 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                         : Colors.black.withValues(alpha: 0.06),
                   ),
 
-                  // Scrollable Content
-                  Expanded(
+                  // Scrollable Body
+                  Flexible(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        20 + bottomInset,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Question title input
+                          // Question Input
                           Text(
-                            'POLL QUESTION',
+                            'QUESTION',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white38 : Colors.black38,
-                              letterSpacing: 1.0,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           TextField(
                             controller: titleCtrl,
                             style: const TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
+                            maxLines: 2,
                             decoration: InputDecoration(
-                              hintText: 'What topic should we cover next?',
+                              hintText: 'e.g. What should we discuss next?',
                               hintStyle: TextStyle(
                                 color: isDark ? Colors.white30 : Colors.black26,
                                 fontWeight: FontWeight.normal,
+                                fontSize: 13,
                               ),
-                              prefixIcon: Container(
-                                margin: const EdgeInsets.all(10),
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(
-                                  Icons.help_outline_rounded,
-                                  color: AppColors.primary,
-                                  size: 16,
-                                ),
+                              filled: true,
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
                               ),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
                                   color: isDark
                                       ? Colors.white12
@@ -922,7 +915,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
                                   color: isDark
                                       ? Colors.white12
@@ -930,123 +923,122 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
                                   color: AppColors.primary,
-                                  width: 2,
+                                  width: 1.5,
                                 ),
-                              ),
-                              filled: true,
-                              fillColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.04)
-                                  : Colors.black.withValues(alpha: 0.02),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 14,
                               ),
                             ),
                           ),
 
-                          const SizedBox(height: 28),
+                          const SizedBox(height: 18),
 
-                          // Poll type selector
+                          // Poll Format (Small horizontal chips)
                           Text(
-                            'POLL FORMAT',
+                            'FORMAT',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white38 : Colors.black38,
-                              letterSpacing: 1.0,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: 100,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: pollTypes.length,
-                              itemBuilder: (ctx, idx) {
-                                final pt = pollTypes[idx];
-                                final isSelected = type == pt['value'];
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: pollTypes.map((pt) {
+                                final isSel = type == pt['value'];
                                 final color = pt['color'] as Color;
                                 return Padding(
-                                  padding: EdgeInsets.only(
-                                    right: idx < pollTypes.length - 1 ? 10 : 0,
-                                  ),
-                                  child: GestureDetector(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: InkWell(
                                     onTap: () => setDialogState(
                                       () => type = pt['value'] as String,
                                     ),
+                                    borderRadius: BorderRadius.circular(20),
                                     child: AnimatedContainer(
                                       duration: const Duration(
                                         milliseconds: 200,
                                       ),
-                                      width: 84,
+                                      curve: Curves.easeInOut,
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 12,
+                                        horizontal: 13,
+                                        vertical: 7,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? color.withValues(
-                                                alpha: isDark ? 0.18 : 0.1,
+                                        gradient: isSel
+                                            ? LinearGradient(
+                                                colors: [
+                                                  color,
+                                                  color.withValues(alpha: 0.85),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
                                               )
+                                            : null,
+                                        color: isSel
+                                            ? null
                                             : (isDark
                                                   ? Colors.white.withValues(
-                                                      alpha: 0.04,
+                                                      alpha: 0.05,
                                                     )
                                                   : Colors.black.withValues(
-                                                      alpha: 0.02,
+                                                      alpha: 0.03,
                                                     )),
-                                        borderRadius: BorderRadius.circular(16),
+                                        borderRadius: BorderRadius.circular(20),
                                         border: Border.all(
-                                          color: isSelected
-                                              ? color
+                                          color: isSel
+                                              ? color.withValues(alpha: 0.9)
                                               : (isDark
                                                     ? Colors.white12
-                                                    : Colors.black12),
-                                          width: isSelected ? 2 : 1,
+                                                    : Colors.black.withValues(
+                                                        alpha: 0.08,
+                                                      )),
+                                          width: isSel ? 1.5 : 1.0,
                                         ),
-                                        boxShadow: isSelected
+                                        boxShadow: isSel
                                             ? [
                                                 BoxShadow(
                                                   color: color.withValues(
-                                                    alpha: 0.2,
+                                                    alpha: 0.35,
                                                   ),
                                                   blurRadius: 8,
-                                                  offset: const Offset(0, 3),
+                                                  offset: const Offset(0, 2),
                                                 ),
                                               ]
                                             : null,
                                       ),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(
                                             pt['icon'] as IconData,
-                                            color: isSelected
-                                                ? color
+                                            size: 14,
+                                            color: isSel
+                                                ? Colors.white
                                                 : (isDark
-                                                      ? Colors.white38
-                                                      : Colors.black38),
-                                            size: 26,
+                                                      ? color.withValues(
+                                                          alpha: 0.9,
+                                                        )
+                                                      : color),
                                           ),
-                                          const SizedBox(height: 7),
+                                          const SizedBox(width: 6),
                                           Text(
                                             pt['label'] as String,
-                                            textAlign: TextAlign.center,
                                             style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: isSelected
+                                              color: isSel
+                                                  ? Colors.white
+                                                  : (isDark
+                                                        ? Colors.white70
+                                                        : Colors.black87),
+                                              fontWeight: isSel
                                                   ? FontWeight.w800
                                                   : FontWeight.w600,
-                                              color: isSelected
-                                                  ? color
-                                                  : (isDark
-                                                        ? Colors.white54
-                                                        : Colors.black45),
-                                              height: 1.2,
+                                              fontSize: 12,
+                                              letterSpacing: 0.1,
                                             ),
                                           ),
                                         ],
@@ -1054,253 +1046,157 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                     ),
                                   ),
                                 );
-                              },
+                              }).toList(),
                             ),
                           ),
 
                           if (type == 'multiple_choice' ||
                               type == 'ranking') ...[
-                            const SizedBox(height: 28),
-                            Row(
-                              children: [
-                                Text(
-                                  'ANSWER OPTIONS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.black38,
-                                    letterSpacing: 1.0,
-                                  ),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  '${optCtrls.length} options',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.black38,
-                                  ),
-                                ),
-                              ],
+                            const SizedBox(height: 18),
+
+                            // Options Header
+                            Text(
+                              'OPTIONS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white54 : Colors.black45,
+                                letterSpacing: 0.8,
+                              ),
                             ),
-                            const SizedBox(height: 12),
-                            ...List.generate(optCtrls.length, (index) {
-                              final letters = [
-                                'A',
-                                'B',
-                                'C',
-                                'D',
-                                'E',
-                                'F',
-                                'G',
-                                'H',
-                              ];
-                              final letter = index < letters.length
-                                  ? letters[index]
-                                  : '${index + 1}';
+                            const SizedBox(height: 10),
+
+                            // Options List
+                            ...List.generate(optCtrls.length, (idx) {
+                              final letter = idx < letters.length
+                                  ? letters[idx]
+                                  : '${idx + 1}';
+
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 34,
-                                      height: 34,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary.withValues(
-                                          alpha: 0.12,
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.03)
+                                        : Colors.black.withValues(alpha: 0.02),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : Colors.black12,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.12,
+                                          ),
                                         ),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Center(
+                                        alignment: Alignment.center,
                                         child: Text(
                                           letter,
                                           style: const TextStyle(
+                                            fontSize: 12,
                                             fontWeight: FontWeight.w800,
-                                            fontSize: 13,
                                             color: AppColors.primary,
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: optCtrls[index],
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: optCtrls[idx],
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText: 'Option $letter',
+                                            hintStyle: TextStyle(
+                                              color: isDark
+                                                  ? Colors.white24
+                                                  : Colors.black26,
+                                              fontSize: 13,
+                                            ),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  vertical: 8,
+                                                ),
+                                          ),
                                         ),
-                                        decoration: InputDecoration(
-                                          hintText: 'Option $letter…',
-                                          hintStyle: TextStyle(
+                                      ),
+                                      if (optCtrls.length > 2)
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                            size: 18,
                                             color: isDark
-                                                ? Colors.white24
+                                                ? Colors.white30
                                                 : Colors.black26,
                                           ),
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: isDark
-                                                  ? Colors.white12
-                                                  : Colors.black12,
-                                            ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: isDark
-                                                  ? Colors.white12
-                                                  : Colors.black12,
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: AppColors.primary,
-                                              width: 2,
-                                            ),
-                                          ),
-                                          filled: true,
-                                          fillColor: isDark
-                                              ? Colors.white.withValues(
-                                                  alpha: 0.03,
-                                                )
-                                              : Colors.black.withValues(
-                                                  alpha: 0.02,
-                                                ),
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 14,
-                                                vertical: 12,
-                                              ),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              optCtrls.removeAt(idx);
+                                            });
+                                          },
                                         ),
-                                      ),
-                                    ),
-                                    if (optCtrls.length > 2)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 8),
-                                        child: InkWell(
-                                          onTap: () => setDialogState(
-                                            () => optCtrls.removeAt(index),
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Container(
-                                            padding: const EdgeInsets.all(7),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.error.withValues(
-                                                alpha: 0.08,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: const Icon(
-                                              Icons.close_rounded,
-                                              color: AppColors.error,
-                                              size: 16,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               );
                             }),
-                            const SizedBox(height: 6),
-                            GestureDetector(
-                              onTap: () => setDialogState(
-                                () => optCtrls.add(TextEditingController()),
-                              ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 13,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.35,
-                                    ),
-                                    style: BorderStyle.solid,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.03,
+
+                            if (optCtrls.length < 8)
+                              TextButton.icon(
+                                onPressed: () {
+                                  setDialogState(() {
+                                    optCtrls.add(TextEditingController());
+                                  });
+                                },
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: const Text(
+                                  'Add Option',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.add_rounded,
-                                      color: AppColors.primary,
-                                      size: 18,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Add Another Option',
-                                      style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
                               ),
-                            ),
                           ],
 
-                          const SizedBox(height: 36),
+                          const SizedBox(height: 16),
 
                           // Submit button
-                          Container(
+                          SizedBox(
                             width: double.infinity,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: AppColors.primaryGradient,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.35,
-                                  ),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: ElevatedButton.icon(
+                            height: 46,
+                            child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
+                                backgroundColor: AppColors.primary,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
+                                elevation: 0,
                               ),
                               onPressed: () async {
                                 final title = titleCtrl.text.trim();
                                 if (title.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                        'Please enter a question title',
-                                      ),
+                                      content: Text('Please enter a question'),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
                                     ),
@@ -1320,7 +1216,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text(
-                                          'Please provide at least 2 non-empty options',
+                                          'Please provide at least 2 options',
                                         ),
                                         backgroundColor: AppColors.error,
                                         behavior: SnackBarBehavior.floating,
@@ -1344,19 +1240,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   await _loadInitialData();
                                   messenger.showSnackBar(
                                     const SnackBar(
-                                      content: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.check_circle_rounded,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Live poll created successfully!',
-                                          ),
-                                        ],
-                                      ),
+                                      content: Text('Poll created!'),
                                       backgroundColor: AppColors.success,
                                       behavior: SnackBarBehavior.floating,
                                     ),
@@ -1373,13 +1257,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   );
                                 }
                               },
-                              icon: const Icon(Icons.poll_rounded, size: 18),
-                              label: const Text(
-                                'Create Live Poll',
+                              child: const Text(
+                                'Create Poll',
                                 style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.2,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -1406,6 +1288,9 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       TextEditingController(),
     ];
     int correctIndex = 0;
+    int selectedDuration = 15;
+    const durations = [10, 15, 30, 45, 60];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
     showModalBottomSheet(
       context: context,
@@ -1416,141 +1301,47 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            final screenHeight = MediaQuery.of(context).size.height;
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
             return Container(
-              height: screenHeight * 0.92,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
+              ),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1B2E) : Colors.white,
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
+                  top: Radius.circular(24),
                 ),
               ),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // Drag Handle
                   const SizedBox(height: 12),
                   Container(
-                    width: 40,
+                    width: 36,
                     height: 4,
                     decoration: BoxDecoration(
                       color: isDark ? Colors.white24 : Colors.black12,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
 
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.purpleAccent.withValues(
-                                  alpha: 0.35,
-                                ),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.emoji_events_rounded,
-                            color: Colors.white,
-                            size: 26,
-                          ),
+                  // Minimal Centered Header
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Center(
+                      child: Text(
+                        'Add Quiz Question',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Add Quiz Question',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.5,
-                                ),
-                              ),
-                              Text(
-                                'Scored timed question with correct answer',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? Colors.white54
-                                      : Colors.black45,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.close_rounded,
-                            color: isDark ? Colors.white38 : Colors.black38,
-                          ),
-                          onPressed: () => Navigator.pop(dialogCtx),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Timer hint banner
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.purpleAccent.withValues(
-                          alpha: isDark ? 0.12 : 0.07,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppColors.purpleAccent.withValues(alpha: 0.25),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.timer_rounded,
-                            color: AppColors.purpleAccent,
-                            size: 16,
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'A 15-second timer starts automatically when you launch this question live',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.purpleAccent,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 16),
                   Divider(
                     height: 1,
                     color: isDark
@@ -1558,57 +1349,53 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                         : Colors.black.withValues(alpha: 0.06),
                   ),
 
-                  // Scrollable content
-                  Expanded(
+                  // Scrollable Body
+                  Flexible(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        20 + bottomInset,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Question Input
                           Text(
-                            'QUIZ QUESTION',
+                            'QUESTION',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white38 : Colors.black38,
-                              letterSpacing: 1.0,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           TextField(
                             controller: titleCtrl,
                             style: const TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               fontWeight: FontWeight.w600,
                             ),
                             maxLines: 2,
                             decoration: InputDecoration(
-                              hintText:
-                                  'e.g. Which keyword defines an immutable variable in Dart?',
+                              hintText: 'e.g. What is the output of 2 + 2?',
                               hintStyle: TextStyle(
                                 color: isDark ? Colors.white30 : Colors.black26,
                                 fontWeight: FontWeight.normal,
+                                fontSize: 13,
                               ),
-                              prefixIcon: Padding(
-                                padding: const EdgeInsets.only(bottom: 28),
-                                child: Container(
-                                  margin: const EdgeInsets.all(10),
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.purpleAccent.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.help_outline_rounded,
-                                    color: AppColors.purpleAccent,
-                                    size: 16,
-                                  ),
-                                ),
+                              filled: true,
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
                               ),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
                                   color: isDark
                                       ? Colors.white12
@@ -1616,7 +1403,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 ),
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(
                                   color: isDark
                                       ? Colors.white12
@@ -1624,83 +1411,132 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 ),
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
                                   color: AppColors.purpleAccent,
-                                  width: 2,
+                                  width: 1.5,
                                 ),
-                              ),
-                              filled: true,
-                              fillColor: isDark
-                                  ? Colors.white.withValues(alpha: 0.04)
-                                  : Colors.black.withValues(alpha: 0.02),
-                              contentPadding: const EdgeInsets.fromLTRB(
-                                16,
-                                14,
-                                16,
-                                14,
                               ),
                             ),
                           ),
 
-                          const SizedBox(height: 28),
+                          const SizedBox(height: 18),
 
+                          // Timer Duration Selector
                           Row(
                             children: [
                               Text(
-                                'ANSWER OPTIONS',
+                                'TIMER DURATION',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
                                   color: isDark
-                                      ? Colors.white38
-                                      : Colors.black38,
-                                  letterSpacing: 1.0,
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                  letterSpacing: 0.8,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.success.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle_rounded,
-                                      color: AppColors.success,
-                                      size: 10,
-                                    ),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      'Tap ○ to mark correct',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: AppColors.success,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
+                              const Spacer(),
+                              Text(
+                                '${selectedDuration}s limit',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.purpleAccent,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: durations.map((d) {
+                                final isSel = selectedDuration == d;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    label: Text('${d}s'),
+                                    selected: isSel,
+                                    onSelected: (_) => setDialogState(
+                                      () => selectedDuration = d,
+                                    ),
+                                    selectedColor: AppColors.purpleAccent,
+                                    labelStyle: TextStyle(
+                                      color: isSel
+                                          ? Colors.white
+                                          : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                    backgroundColor: isDark
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : Colors.black.withValues(alpha: 0.04),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    side: BorderSide(
+                                      color: isSel
+                                          ? AppColors.purpleAccent
+                                          : (isDark
+                                                ? Colors.white10
+                                                : Colors.black12),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Options Header
+                          Row(
+                            children: [
+                              Text(
+                                'OPTIONS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '• Tap letter to mark correct',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.black38,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Options List
                           ...List.generate(optCtrls.length, (idx) {
-                            final isSelected = correctIndex == idx;
+                            final isCorrect = correctIndex == idx;
+                            final letter = idx < letters.length
+                                ? letters[idx]
+                                : '${idx + 1}';
+
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: isSelected
+                                  color: isCorrect
                                       ? AppColors.success.withValues(
                                           alpha: isDark ? 0.12 : 0.06,
                                         )
@@ -1711,106 +1547,102 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                             : Colors.black.withValues(
                                                 alpha: 0.02,
                                               )),
-                                  borderRadius: BorderRadius.circular(14),
+                                  borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: isSelected
-                                        ? AppColors.success.withValues(
-                                            alpha: 0.5,
-                                          )
+                                    color: isCorrect
+                                        ? AppColors.success
                                         : (isDark
                                               ? Colors.white10
-                                              : Colors.black.withValues(
-                                                  alpha: 0.08,
-                                                )),
-                                    width: isSelected ? 1.5 : 1,
+                                              : Colors.black12),
+                                    width: isCorrect ? 1.5 : 1,
                                   ),
                                 ),
                                 child: Row(
                                   children: [
+                                    // Correct toggle badge
                                     GestureDetector(
                                       onTap: () => setDialogState(
                                         () => correctIndex = idx,
                                       ),
                                       child: AnimatedContainer(
                                         duration: const Duration(
-                                          milliseconds: 200,
+                                          milliseconds: 180,
                                         ),
-                                        width: 28,
-                                        height: 28,
+                                        width: 30,
+                                        height: 30,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          color: isSelected
+                                          color: isCorrect
                                               ? AppColors.success
-                                              : Colors.transparent,
-                                          border: Border.all(
-                                            color: isSelected
-                                                ? AppColors.success
-                                                : (isDark
-                                                      ? Colors.white30
-                                                      : Colors.black26),
-                                            width: 2,
-                                          ),
+                                              : (isDark
+                                                    ? Colors.white12
+                                                    : Colors.black.withValues(
+                                                        alpha: 0.06,
+                                                      )),
                                         ),
-                                        child: isSelected
+                                        alignment: Alignment.center,
+                                        child: isCorrect
                                             ? const Icon(
                                                 Icons.check_rounded,
                                                 size: 16,
                                                 color: Colors.white,
                                               )
-                                            : null,
+                                            : Text(
+                                                letter,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isDark
+                                                      ? Colors.white70
+                                                      : Colors.black87,
+                                                ),
+                                              ),
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 10),
                                     Expanded(
                                       child: TextField(
                                         controller: optCtrls[idx],
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w700
-                                              : FontWeight.w500,
-                                          color: isSelected
-                                              ? AppColors.success
-                                              : (isDark
-                                                    ? Colors.white
-                                                    : Colors.black87),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                         decoration: InputDecoration(
-                                          hintText: 'Option ${idx + 1}',
+                                          hintText: 'Option $letter',
                                           hintStyle: TextStyle(
                                             color: isDark
                                                 ? Colors.white24
                                                 : Colors.black26,
+                                            fontSize: 13,
                                           ),
                                           border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
                                           isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 8,
+                                              ),
                                         ),
                                       ),
                                     ),
-                                    if (isSelected)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 3,
+                                    if (optCtrls.length > 2)
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.remove_circle_outline_rounded,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.white30
+                                              : Colors.black26,
                                         ),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.success.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'CORRECT',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            color: AppColors.success,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            optCtrls.removeAt(idx);
+                                            if (correctIndex >=
+                                                optCtrls.length) {
+                                              correctIndex = 0;
+                                            }
+                                          });
+                                        },
                                       ),
                                   ],
                                 ),
@@ -1818,48 +1650,44 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                             );
                           }),
 
-                          const SizedBox(height: 36),
+                          if (optCtrls.length < 6)
+                            TextButton.icon(
+                              onPressed: () {
+                                setDialogState(() {
+                                  optCtrls.add(TextEditingController());
+                                });
+                              },
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text(
+                                'Add Option',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
 
                           // Submit button
-                          Container(
+                          SizedBox(
                             width: double.infinity,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF8B5CF6), Color(0xFFEC4899)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.purpleAccent.withValues(
-                                    alpha: 0.35,
-                                  ),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
-                            child: ElevatedButton.icon(
+                            height: 46,
+                            child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
+                                backgroundColor: AppColors.purpleAccent,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
+                                elevation: 0,
                               ),
                               onPressed: () async {
                                 final title = titleCtrl.text.trim();
                                 if (title.isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text(
-                                        'Please enter a question text',
-                                      ),
+                                      content: Text('Please enter a question'),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
                                     ),
@@ -1880,7 +1708,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text(
-                                        'Please provide at least 2 non-empty options',
+                                        'Please provide at least 2 options',
                                       ),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
@@ -1889,15 +1717,13 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   return;
                                 }
 
-                                final isCorrectOptionFilled =
-                                    optCtrls[correctIndex].text
-                                        .trim()
-                                        .isNotEmpty;
-                                if (!isCorrectOptionFilled) {
+                                if (optCtrls[correctIndex].text
+                                    .trim()
+                                    .isEmpty) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text(
-                                        'The correct option cannot be empty',
+                                        'The correct answer option cannot be empty',
                                       ),
                                       backgroundColor: AppColors.error,
                                       behavior: SnackBarBehavior.floating,
@@ -1917,30 +1743,26 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 final navigator = Navigator.of(dialogCtx);
 
                                 try {
-                                  await sl<PollRepository>().createPoll(
-                                    sessionId: _session!['id'] as String,
-                                    title: title,
-                                    type: 'multiple_choice',
-                                    settings: {'isQuiz': true},
-                                    options: options,
-                                  );
+                                  final newPoll = await sl<PollRepository>()
+                                      .createPoll(
+                                        sessionId: _session!['id'] as String,
+                                        title: title,
+                                        type: 'multiple_choice',
+                                        settings: {
+                                          'isQuiz': true,
+                                          'timerLimit': selectedDuration,
+                                        },
+                                        options: options,
+                                      );
+                                  if (newPoll['id'] != null) {
+                                    _quizDurations[newPoll['id'].toString()] =
+                                        selectedDuration;
+                                  }
                                   navigator.pop();
                                   await _loadInitialData();
                                   messenger.showSnackBar(
                                     const SnackBar(
-                                      content: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.check_circle_rounded,
-                                            color: Colors.white,
-                                            size: 16,
-                                          ),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            'Quiz question created successfully!',
-                                          ),
-                                        ],
-                                      ),
+                                      content: Text('Quiz question created!'),
                                       backgroundColor: AppColors.success,
                                       behavior: SnackBarBehavior.floating,
                                     ),
@@ -1957,16 +1779,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                   );
                                 }
                               },
-                              icon: const Icon(
-                                Icons.emoji_events_rounded,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'Create Quiz Question',
+                              child: const Text(
+                                'Create Quiz',
                                 style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.2,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -2263,20 +2080,22 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
             icon: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: (_session?['state'] == 'draft'
-                        ? Colors.amber
-                        : _session?['state'] == 'ended'
+                color:
+                    (_session?['state'] == 'draft'
+                            ? Colors.amber
+                            : _session?['state'] == 'ended'
                             ? Colors.grey
                             : AppColors.success)
-                    .withValues(alpha: 0.15),
+                        .withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: (_session?['state'] == 'draft'
-                          ? Colors.amber
-                          : _session?['state'] == 'ended'
+                  color:
+                      (_session?['state'] == 'draft'
+                              ? Colors.amber
+                              : _session?['state'] == 'ended'
                               ? Colors.grey
                               : AppColors.success)
-                      .withValues(alpha: 0.4),
+                          .withValues(alpha: 0.4),
                 ),
               ),
               child: Row(
@@ -2290,8 +2109,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                       color: _session?['state'] == 'draft'
                           ? Colors.amber
                           : _session?['state'] == 'ended'
-                              ? Colors.grey
-                              : AppColors.success,
+                          ? Colors.grey
+                          : AppColors.success,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -2303,8 +2122,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                       color: _session?['state'] == 'draft'
                           ? Colors.amber
                           : _session?['state'] == 'ended'
-                              ? Colors.grey
-                              : AppColors.success,
+                          ? Colors.grey
+                          : AppColors.success,
                     ),
                   ),
                   const SizedBox(width: 2),
@@ -2319,7 +2138,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                 value: 'active',
                 child: Row(
                   children: [
-                    Icon(Icons.play_circle_fill_rounded, color: AppColors.success, size: 18),
+                    Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: AppColors.success,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Text('Set Active (Live)'),
                   ],
@@ -2329,7 +2152,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                 value: 'draft',
                 child: Row(
                   children: [
-                    Icon(Icons.hourglass_top_rounded, color: Colors.amber, size: 18),
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      color: Colors.amber,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Text('Set Waiting (Draft)'),
                   ],
@@ -2339,7 +2166,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                 value: 'ended',
                 child: Row(
                   children: [
-                    Icon(Icons.stop_circle_rounded, color: AppColors.error, size: 18),
+                    Icon(
+                      Icons.stop_circle_rounded,
+                      color: AppColors.error,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Text('End Session'),
                   ],
@@ -2744,7 +2575,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'End Poll',
+                                      'End',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -2772,7 +2603,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'Reopen Poll',
+                                      'Reopen',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -2800,7 +2631,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'Activate Poll',
+                                      'Activate',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -3223,7 +3054,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                     final isCurrent = _activeQuizQuestionId == pollId;
                     final isTicking = isCurrent && _quizTimeRemaining > 0;
                     final duration = _getQuizDuration(quiz);
-                    final totalVotes = (quiz['results']?['totalVotes'] as num?)?.toInt() ?? 0;
+                    final totalVotes =
+                        (quiz['results']?['totalVotes'] as num?)?.toInt() ?? 0;
                     final options = (quiz['options'] as List?) ?? [];
 
                     return Card(
@@ -3238,8 +3070,12 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                           color: isTicking
                               ? AppColors.purpleAccent
                               : (isCurrent
-                                    ? AppColors.purpleAccent.withValues(alpha: 0.4)
-                                    : (isDark ? Colors.white10 : Colors.black12)),
+                                    ? AppColors.purpleAccent.withValues(
+                                        alpha: 0.4,
+                                      )
+                                    : (isDark
+                                          ? Colors.white10
+                                          : Colors.black12)),
                           width: isTicking ? 2.0 : 1.0,
                         ),
                         borderRadius: BorderRadius.circular(
@@ -3272,10 +3108,12 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        quiz['title'] as String? ?? 'Quiz Question',
+                                        quiz['title'] as String? ??
+                                            'Quiz Question',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 16,
@@ -3359,7 +3197,9 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                     decoration: BoxDecoration(
                                       color: isDark
                                           ? Colors.white.withValues(alpha: 0.06)
-                                          : Colors.black.withValues(alpha: 0.05),
+                                          : Colors.black.withValues(
+                                              alpha: 0.05,
+                                            ),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
                                         color: isDark
@@ -3410,8 +3250,9 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                         decoration: BoxDecoration(
                                           color: AppColors.purpleAccent
                                               .withValues(alpha: 0.15),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -3457,8 +3298,9 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                             vertical: 8,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -3470,7 +3312,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                           color: AppColors.error,
                                         ),
                                         tooltip: 'Stop Timer',
-                                        onPressed: () => _stopQuizQuestion(pollId),
+                                        onPressed: () =>
+                                            _stopQuizQuestion(pollId),
                                       ),
                                     ] else ...[
                                       // If already has responses, show Restart Timer, else Start Timer
@@ -3505,8 +3348,9 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                             vertical: 10,
                                           ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
                                           ),
                                         ),
                                       ),
