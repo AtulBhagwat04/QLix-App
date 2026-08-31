@@ -56,10 +56,35 @@ export default function registerSocketHandlers(io) {
 
         console.log(`Socket ${socket.id} joined room ${roomName} as ${currentRole}`);
 
+        let participant = null;
+        if (participantId) {
+          const partRes = await db.query(
+            'SELECT id, name, is_anonymous, joined_at FROM participants WHERE id = $1',
+            [participantId]
+          );
+          if (partRes.rows.length > 0) {
+            const p = partRes.rows[0];
+            participant = {
+              id: p.id,
+              name: p.is_anonymous ? 'Anonymous' : p.name,
+              isAnonymous: p.is_anonymous,
+              joinedAt: p.joined_at,
+            };
+          }
+        }
+
+        const partCountRes = await db.query(
+          'SELECT COUNT(*) as count FROM participants WHERE session_id = $1',
+          [session.id]
+        );
+        const totalParticipants = parseInt(partCountRes.rows[0].count, 10);
+
         // Broadcast participant join to hosts and presenter
         io.to(roomName).emit('participant_joined_ack', {
           participantId,
           role: currentRole,
+          participant,
+          totalParticipants,
           timestamp: Date.now(),
         });
       } catch (err) {
@@ -224,10 +249,51 @@ export default function registerSocketHandlers(io) {
         // Recalculate results
         const aggregates = await calculatePollResults(poll);
 
+        // Total votes count for the session
+        const voteCountRes = await db.query(
+          `SELECT COUNT(v.id) as count
+           FROM votes v
+           JOIN polls p ON v.poll_id = p.id
+           WHERE p.session_id = $1`,
+          [poll.session_id]
+        );
+        const totalVotes = parseInt(voteCountRes.rows[0]?.count || 0, 10);
+
+        // Fetch participant name for recent activity
+        let participantName = 'Anonymous';
+        if (participantId) {
+          const partRes = await db.query('SELECT name, is_anonymous FROM participants WHERE id = $1', [participantId]);
+          if (partRes.rows.length > 0 && !partRes.rows[0].is_anonymous) {
+            participantName = partRes.rows[0].name || 'Anonymous';
+          }
+        }
+
+        // Fetch option text if multiple choice or ranking
+        let optionText = null;
+        if (optionIds && optionIds.length > 0) {
+          const optRes = await db.query('SELECT option_text FROM poll_options WHERE id = $1', [optionIds[0]]);
+          optionText = optRes.rows[0]?.option_text || null;
+        }
+
+        const recentResponseItem = {
+          id: Math.random().toString(),
+          createdAt: new Date().toISOString(),
+          participantName,
+          pollTitle: poll.title,
+          pollType: poll.type,
+          optionText: optionText,
+          ratingValue: ratingValue ?? null,
+          textResponse: textResponse ?? null,
+          rankValue: rankingIds && rankingIds.length > 0 ? 0 : null
+        };
+
         // Broadcast updated results to room
         io.to(currentRoom).emit('votes_updated', {
           pollId,
+          sessionId: poll.session_id,
           results: aggregates,
+          totalVotes,
+          recentResponse: recentResponseItem,
         });
 
       } catch (err) {

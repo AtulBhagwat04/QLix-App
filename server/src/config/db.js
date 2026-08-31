@@ -1,8 +1,9 @@
 import sqlite3 from 'sqlite3';
 import mongoose from 'mongoose';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { safeJsonParse } from '../utils/helpers.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -139,12 +140,8 @@ async function syncTableToMongo(tableName) {
         const doc = { ...row };
         // Parse settings/structure strings into JSON objects for MongoDB storage
         for (const key of ['settings', 'structure']) {
-          if (doc[key] && typeof doc[key] === 'string') {
-            try {
-              doc[key] = JSON.parse(doc[key]);
-            } catch (e) {
-              // keep as string
-            }
+          if (doc[key]) {
+            doc[key] = safeJsonParse(doc[key], doc[key]);
           }
         }
         return doc;
@@ -181,11 +178,7 @@ function formatRows(rows) {
         if (key.endsWith('_at')) {
           formatted[key] = new Date(val);
         } else if (key === 'settings' || key === 'structure') {
-          try {
-            formatted[key] = JSON.parse(val);
-          } catch (e) {
-            // Keep as string
-          }
+          formatted[key] = safeJsonParse(val, val);
         }
       }
     }

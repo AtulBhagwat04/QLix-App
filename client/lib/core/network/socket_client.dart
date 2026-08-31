@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get_it/get_it.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../storage/cache_manager.dart';
@@ -57,6 +57,8 @@ class SocketClient {
       StreamController<Map<String, dynamic>>.broadcast();
   final _sessionStateController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _participantJoinedController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>?> get pollActivationStream =>
@@ -76,6 +78,8 @@ class SocketClient {
       _announcementController.stream;
   Stream<Map<String, dynamic>> get sessionStateStream =>
       _sessionStateController.stream;
+  Stream<Map<String, dynamic>> get participantJoinedStream =>
+      _participantJoinedController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -97,7 +101,7 @@ class SocketClient {
     );
 
     _socket!.onConnect((_) {
-      print('Socket connected to backend');
+      debugPrint('Socket connected to backend');
       _connectionController.add(true);
       if (_lastAccessCode != null) {
         _socket?.emit('join_session', {
@@ -109,7 +113,7 @@ class SocketClient {
     });
 
     _socket!.onDisconnect((_) {
-      print('Socket disconnected from backend');
+      debugPrint('Socket disconnected from backend');
       _connectionController.add(false);
     });
 
@@ -171,6 +175,12 @@ class SocketClient {
     _socket!.on('session_state_changed', (data) {
       if (data != null) {
         _sessionStateController.add(Map<String, dynamic>.from(data as Map));
+      }
+    });
+
+    _socket!.on('participant_joined_ack', (data) {
+      if (data != null) {
+        _participantJoinedController.add(Map<String, dynamic>.from(data as Map));
       }
     });
 
@@ -303,5 +313,6 @@ class SocketClient {
     _quizTimerController.close();
     _announcementController.close();
     _sessionStateController.close();
+    _participantJoinedController.close();
   }
 }

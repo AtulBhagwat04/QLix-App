@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_images.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
@@ -85,8 +86,11 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
   }
 
   void _shareSessionInvite(String code) {
-    Share.share(
-      'Join my QLix interactive session using code: $code\nOr join online at: ${SocketClient.serverUrl}/session/$code',
+    SharePlus.instance.share(
+      ShareParams(
+        text:
+            'Join my QLix interactive session using code: $code\nOr join online at: ${SocketClient.serverUrl}/session/$code',
+      ),
     );
   }
 
@@ -154,11 +158,19 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
                       ],
                     ),
                     child: QrImageView(
-                      data: 'http://${ApiClient.defaultHost}:3000/session/$code',
+                      data:
+                          'http://${ApiClient.defaultHost}:3000/session/$code',
                       version: QrVersions.auto,
                       size: 200,
                       gapless: false,
-                      foregroundColor: Colors.black,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: Colors.black,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -446,61 +458,10 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
     );
   }
 
-  Widget _buildLogoIcon() {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: AppColors.primaryGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Center(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 3.5,
-              height: 14,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            ),
-            const SizedBox(width: 3),
-            Container(
-              width: 3.5,
-              height: 22,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            ),
-            const SizedBox(width: 3),
-            Container(
-              width: 3.5,
-              height: 16,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildHeader() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
-        //_buildLogoIcon(),
-        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -908,14 +869,20 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                      letterSpacing: -0.5,
-                      height: 1.1,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: isDark
+                            ? Colors.white
+                            : AppColors.textPrimaryLight,
+                        letterSpacing: -0.5,
+                        height: 1.1,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1377,7 +1344,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'My Sessions',
+                      'Sessions',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
@@ -1556,153 +1523,382 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
           (sum, s) => sum + (s['participant_count'] as int? ?? 0),
         );
     final totalResponses = stats?['totalResponses'] ?? 0;
+    final totalQuizzes = stats?['totalQuizzes'] ?? 0;
 
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-      child:
-          Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Host Reports',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                      letterSpacing: -0.8,
+    final liveCount = sessions.where((s) => s['state'] == 'active').length;
+    final draftCount = sessions
+        .where((s) => s['state'] != 'active' && s['state'] != 'ended')
+        .length;
+    final endedCount = sessions.where((s) => s['state'] == 'ended').length;
+
+    // Engagement health calculation
+    final avgAttendance = totalSessions > 0
+        ? (totalParticipants / totalSessions)
+        : 0.0;
+    final healthScore = totalSessions == 0
+        ? 0
+        : ((avgAttendance * 12 + totalResponses * 2).clamp(40, 98)).toInt();
+
+    // Sorted top sessions by participant count
+    final sortedSessions = List<dynamic>.from(sessions)
+      ..sort((a, b) {
+        final countA = a['participant_count'] as int? ?? 0;
+        final countB = b['participant_count'] as int? ?? 0;
+        return countB.compareTo(countA);
+      });
+    final topSessions = sortedSessions.take(4).toList();
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<SessionBloc>().add(LoadSessions());
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        child:
+            Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 1. Executive Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Analytics & Insights',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w900,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColors.textPrimaryLight,
+                                letterSpacing: -0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Audience performance intelligence',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: isDark
+                                    ? Colors.white54
+                                    : AppColors.textSecondaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 12,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'All Time',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'View aggregate performance across all sessions you have hosted.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 18),
+
+                    // 2. Executive Hero Banner: Performance Health & Impact Card
+                    _buildAnalyticsHeroCard(
+                      isDark: isDark,
+                      healthScore: healthScore,
+                      totalSessions: totalSessions,
+                      totalParticipants: totalParticipants,
+                      totalResponses: totalResponses,
+                      avgAttendance: avgAttendance,
+                      liveCount: liveCount,
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
+                    const SizedBox(height: 22),
+
+                    // 3. Lifecycle Distribution Bar
+                    _buildLifecycleDistributionSection(
+                      isDark: isDark,
+                      totalSessions: totalSessions,
+                      liveCount: liveCount,
+                      draftCount: draftCount,
+                      endedCount: endedCount,
+                    ),
+                    const SizedBox(height: 22),
+
+                    // 4. Feature Activity Comparison Cards (Polls, Q&A, Quizzes)
+                    _buildFeatureActivitySection(
+                      isDark: isDark,
+                      totalResponses: totalResponses,
+                      totalQuizzes: totalQuizzes,
+                      totalParticipants: totalParticipants,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // 5. Top Performing Sessions Leaderboard
+                    _buildTopSessionsLeaderboard(
+                      isDark: isDark,
+                      topSessions: topSessions,
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 6. Pro Host Intelligence Insight Tip
+                    _buildHostInsightTipCard(isDark),
+                  ],
+                )
+                .animate()
+                .fade(duration: 400.ms)
+                .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsHeroCard({
+    required bool isDark,
+    required int healthScore,
+    required int totalSessions,
+    required int totalParticipants,
+    required int totalResponses,
+    required double avgAttendance,
+    required int liveCount,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF1E1B4B), const Color(0xFF312E81)]
+              : [const Color(0xFF4F46E5), const Color(0xFF6366F1)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4F46E5).withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _buildReportCard(
-                          label: 'Avg Participants',
-                          value: totalSessions > 0
-                              ? (totalParticipants / totalSessions)
-                                    .toStringAsFixed(1)
-                              : '0',
-                          icon: Icons.group_rounded,
-                          color: AppColors.primary,
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF34D399),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            totalSessions == 0
+                                ? 'READY TO ENGAGE'
+                                : 'HIGH IMPACT HOST',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFFA5B4FC),
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '$totalParticipants',
+                        style: const TextStyle(
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: -1.0,
+                          height: 1.0,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildReportCard(
-                          label: 'Avg Responses',
-                          value: totalSessions > 0
-                              ? (totalResponses / totalSessions)
-                                    .toStringAsFixed(1)
-                              : '0',
-                          icon: Icons.poll_rounded,
-                          color: AppColors.secondary,
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Audience Members Reached',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white70,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Detailed Session Analytics',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (sessions.isEmpty)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 36),
-                        child: Text(
-                          'Create a session to gather report details',
-                          style: TextStyle(color: Colors.grey),
+                ),
+                // Circular Gauge
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 68,
+                      height: 68,
+                      child: CircularProgressIndicator(
+                        value: totalSessions == 0
+                            ? 0.05
+                            : (healthScore / 100.0),
+                        strokeWidth: 6.5,
+                        backgroundColor: Colors.white.withValues(alpha: 0.15),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFF34D399),
                         ),
                       ),
-                    )
-                  else
-                    ...sessions.map((s) {
-                      final id = s['id'] as String? ?? '';
-                      final title = s['title'] as String? ?? 'Untitled';
-                      final participants = s['participant_count'] as int? ?? 0;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.surfaceDark.withValues(alpha: 0.4)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.08)
-                                : const Color(0xFFE2E8F0),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '$healthScore%',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
                           ),
                         ),
-                        child: ListTile(
-                          title: Text(
-                            title,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            '$participants participants joined',
-                            style: const TextStyle(
-                              color: Colors.grey,
-                              fontSize: 12,
-                            ),
-                          ),
-                          trailing: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.08),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.arrow_forward_rounded,
-                                color: AppColors.primary,
-                                size: 18,
-                              ),
-                              onPressed: () => context.push('/analytics/$id'),
-                            ),
+                        const Text(
+                          'Score',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white70,
                           ),
                         ),
-                      );
-                    }),
-                ],
-              )
-              .animate()
-              .fade(duration: 400.ms)
-              .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.15),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(18),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildHeroStatItem(
+                    label: 'Avg / Session',
+                    value: avgAttendance.toStringAsFixed(1),
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 24,
+                  color: Colors.white.withValues(alpha: 0.15),
+                ),
+                Expanded(
+                  child: _buildHeroStatItem(
+                    label: 'Responses',
+                    value: '$totalResponses',
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 24,
+                  color: Colors.white.withValues(alpha: 0.15),
+                ),
+                Expanded(
+                  child: _buildHeroStatItem(
+                    label: 'Live Now',
+                    value: '$liveCount',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildReportCard({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
+  Widget _buildHeroStatItem({required String label, required String value}) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFFA5B4FC),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLifecycleDistributionSection({
+    required bool isDark,
+    required int totalSessions,
+    required int liveCount,
+    required int draftCount,
+    required int endedCount,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final liveRatio = totalSessions > 0 ? (liveCount / totalSessions) : 0.0;
+    final draftRatio = totalSessions > 0 ? (draftCount / totalSessions) : 0.0;
+    final endedRatio = totalSessions > 0
+        ? (endedCount / totalSessions)
+        : (totalSessions == 0 ? 1.0 : 0.0);
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isDark
             ? AppColors.surfaceDark.withValues(alpha: 0.4)
             : Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
               : const Color(0xFFE2E8F0),
+          width: 1,
         ),
       ),
       child: Column(
@@ -1712,31 +1908,481 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                value,
+                'Session Distribution',
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                  letterSpacing: -1.0,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
+              Text(
+                '$totalSessions total',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
                 ),
-                child: Icon(icon, color: color, size: 20),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
+          // Multi-segmented Progress Bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: SizedBox(
+              height: 10,
+              child: Row(
+                children: [
+                  if (liveRatio > 0)
+                    Expanded(
+                      flex: (liveRatio * 100).toInt(),
+                      child: Container(color: AppColors.success),
+                    ),
+                  if (draftRatio > 0)
+                    Expanded(
+                      flex: (draftRatio * 100).toInt(),
+                      child: Container(color: AppColors.primary),
+                    ),
+                  if (endedRatio > 0)
+                    Expanded(
+                      flex: (endedRatio * 100).toInt(),
+                      child: Container(
+                        color: isDark
+                            ? const Color(0xFF475569)
+                            : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Legend Chips
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildLegendChip(
+                dotColor: AppColors.success,
+                label: 'Live',
+                count: liveCount,
+                isDark: isDark,
+              ),
+              _buildLegendChip(
+                dotColor: AppColors.primary,
+                label: 'Draft',
+                count: draftCount,
+                isDark: isDark,
+              ),
+              _buildLegendChip(
+                dotColor: isDark
+                    ? const Color(0xFF475569)
+                    : const Color(0xFF94A3B8),
+                label: 'Ended',
+                count: endedCount,
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendChip({
+    required Color dotColor,
+    required String label,
+    required int count,
+    required bool isDark,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '$label ($count)',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white70 : AppColors.textSecondaryLight,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureActivitySection({
+    required bool isDark,
+    required int totalResponses,
+    required int totalQuizzes,
+    required int totalParticipants,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Interaction Breakdown',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : AppColors.textPrimaryLight,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _buildFeatureCard(
+                icon: Icons.poll_rounded,
+                iconColor: const Color(0xFF3B82F6),
+                title: 'Polls Activity',
+                countText: '$totalResponses votes',
+                subtitle: 'Audience polling',
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildFeatureCard(
+                icon: Icons.emoji_events_rounded,
+                iconColor: const Color(0xFFF59E0B),
+                title: 'Quiz Game',
+                countText: '$totalQuizzes active',
+                subtitle: 'Leaderboards',
+                isDark: isDark,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFeatureCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String countText,
+    required String subtitle,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.surfaceDark.withValues(alpha: 0.4)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+          const SizedBox(height: 10),
           Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-              fontWeight: FontWeight.bold,
+            countText,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white : AppColors.textPrimaryLight,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white54 : AppColors.textSecondaryLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopSessionsLeaderboard({
+    required bool isDark,
+    required List<dynamic> topSessions,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Top Performing Sessions',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+              ),
+            ),
+            if (topSessions.isNotEmpty)
+              Text(
+                'By Attendees',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white38 : Colors.grey,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (topSessions.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? AppColors.surfaceDark.withValues(alpha: 0.4)
+                  : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.leaderboard_outlined,
+                    size: 36,
+                    color: Colors.grey.withValues(alpha: 0.4),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No session activity yet',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white54 : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...topSessions.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final s = entry.value;
+            final id = s['id'] as String? ?? '';
+            final title = s['title'] as String? ?? 'Untitled Session';
+            final participants = s['participant_count'] as int? ?? 0;
+            final createdAt = s['created_at'] as String?;
+            final dateStr = createdAt != null
+                ? _formatDate(createdAt)
+                : 'Recently';
+
+            // Rank colors
+            Color rankBg;
+            Color rankFg;
+            if (idx == 0) {
+              rankBg = const Color(0xFFFEF3C7);
+              rankFg = const Color(0xFFD97706);
+            } else if (idx == 1) {
+              rankBg = const Color(0xFFF1F5F9);
+              rankFg = const Color(0xFF475569);
+            } else if (idx == 2) {
+              rankBg = const Color(0xFFFFEDD5);
+              rankFg = const Color(0xFFC2410C);
+            } else {
+              rankBg = isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : const Color(0xFFF8FAFC);
+              rankFg = Colors.grey;
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceDark.withValues(alpha: 0.4)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : const Color(0xFFE2E8F0),
+                  width: 1,
+                ),
+              ),
+              child: InkWell(
+                onTap: () => context.push('/analytics/$id'),
+                borderRadius: BorderRadius.circular(14),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      // Rank Badge
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: rankBg,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '#${idx + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: rankFg,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Title & Date
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.white
+                                    : AppColors.textPrimaryLight,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              dateStr,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.white38 : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Attendees Chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.people_alt_rounded,
+                              size: 12,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '$participants',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: isDark ? Colors.white30 : Colors.grey.shade400,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _buildHostInsightTipCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF1E1B4B).withValues(alpha: 0.5)
+            : const Color(0xFFEEF2FF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.lightbulb_outline_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Host Growth Tip',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? const Color(0xFFA5B4FC) : AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Sessions that combine Live Polls and interactive Q&A experience up to 3.4x higher audience retention and engagement.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : const Color(0xFF475569),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1816,7 +2462,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
                     title: 'Help & FAQ',
                     onTap: () {},
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 32),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.error,
@@ -1839,6 +2485,44 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
                       'Log Out',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
+                  ),
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.asset(
+                          AppImages.appLogo,
+                          width: 20,
+                          height: 20,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            width: 20,
+                            height: 20,
+                            color: AppColors.primary,
+                            alignment: Alignment.center,
+                            child: const Text(
+                              'Q',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'QLix v1.0.0 • Interactive Live Engagement',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? Colors.white38 : Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               )
@@ -2140,159 +2824,20 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
         ),
       ),
       floatingActionButton: (_currentTab ?? 0) == 1
-          ? Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(15),
-                gradient: const LinearGradient(
-                  colors: AppColors.primaryGradient,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+          ? FloatingActionButton(
+              backgroundColor: AppColors.primary,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: FloatingActionButton.extended(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                onPressed: () => context.push('/session/create'),
-                icon: const Icon(Icons.add_rounded, color: Colors.white),
-                label: const Text(
-                  'Create Room',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
+              onPressed: () => context.push('/session/create'),
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
               ),
             )
           : null,
     );
   }
-}
-
-class _PulseDot extends StatefulWidget {
-  const _PulseDot();
-
-  @override
-  State<_PulseDot> createState() => _PulseDotState();
-}
-
-class _PulseDotState extends State<_PulseDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, child) {
-        return Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.success,
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.success.withValues(
-                  alpha: 0.4 * _ctrl.value + 0.1,
-                ),
-                blurRadius: 6.0 * _ctrl.value + 2.0,
-                spreadRadius: 2.5 * _ctrl.value,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class SparklinePainter extends CustomPainter {
-  final List<double> data;
-  final Color color;
-
-  SparklinePainter(this.data, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (data.isEmpty) return;
-
-    final path = Path();
-    final fillPath = Path();
-
-    final double stepX = size.width / (data.length - 1);
-
-    // Find min and max to scale
-    double maxVal = data.reduce((a, b) => a > b ? a : b);
-    double minVal = data.reduce((a, b) => a < b ? a : b);
-    if (maxVal == minVal) {
-      maxVal += 1;
-      minVal -= 1;
-    }
-    final double range = maxVal - minVal;
-
-    double getY(double val) {
-      return size.height - ((val - minVal) / range) * size.height;
-    }
-
-    path.moveTo(0, getY(data[0]));
-    fillPath.moveTo(0, size.height);
-    fillPath.lineTo(0, getY(data[0]));
-
-    for (int i = 0; i < data.length - 1; i++) {
-      final x1 = i * stepX;
-      final y1 = getY(data[i]);
-      final x2 = (i + 1) * stepX;
-      final y2 = getY(data[i + 1]);
-
-      final cx = (x1 + x2) / 2;
-
-      path.cubicTo(cx, y1, cx, y2, x2, y2);
-      fillPath.cubicTo(cx, y1, cx, y2, x2, y2);
-    }
-
-    fillPath.lineTo(size.width, size.height);
-    fillPath.close();
-
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.0)],
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
-
-    canvas.drawPath(fillPath, fillPaint);
-
-    final linePaint = Paint()
-      ..color = color
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawPath(path, linePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant SparklinePainter oldDelegate) =>
-      oldDelegate.data != data || oldDelegate.color != color;
 }

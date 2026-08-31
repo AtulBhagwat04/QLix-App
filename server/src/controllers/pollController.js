@@ -1,6 +1,7 @@
 import db from '../config/db.js';
 import redis from '../config/redis.js';
 import { AppError } from '../middlewares/errorHandler.js';
+import { parseCount, formatPollOption } from '../utils/helpers.js';
 
 export const createPoll = async (req, res, next) => {
   const { sessionId, title, type, settings, options } = req.body;
@@ -16,8 +17,7 @@ export const createPoll = async (req, res, next) => {
         'SELECT COUNT(*) as count FROM polls WHERE session_id = $1',
         [sessionId]
       );
-      const rawCount = countRes.rows[0]?.count ?? countRes.rows[0]?.['COUNT(*)'] ?? countRes.rows[0]?.['count(*)'] ?? 0;
-      const orderIndex = parseInt(rawCount, 10) || 0;
+      const orderIndex = parseCount(countRes.rows[0]);
 
       const pollRes = await client.query(
         `INSERT INTO polls (session_id, title, type, settings, order_index)
@@ -76,14 +76,7 @@ export const getSessionPolls = async (req, res, next) => {
         'SELECT * FROM poll_options WHERE poll_id = $1 ORDER BY order_index ASC',
         [polls[i].id]
       );
-      polls[i].options = optRes.rows.map(opt => ({
-        id: opt.id,
-        pollId: opt.poll_id,
-        optionText: opt.option_text,
-        option_text: opt.option_text,
-        isCorrect: opt.is_correct,
-        orderIndex: opt.order_index
-      }));
+      polls[i].options = optRes.rows.map(formatPollOption);
       polls[i].results = await calculatePollResults(polls[i]);
     }
 
@@ -229,14 +222,7 @@ export const getPollResults = async (req, res, next) => {
       'SELECT * FROM poll_options WHERE poll_id = $1 ORDER BY order_index ASC',
       [id]
     );
-    poll.options = optRes.rows.map(opt => ({
-      id: opt.id,
-      pollId: opt.poll_id,
-      optionText: opt.option_text,
-      option_text: opt.option_text,
-      isCorrect: opt.is_correct,
-      orderIndex: opt.order_index
-    }));
+    poll.options = optRes.rows.map(formatPollOption);
 
     const results = await calculatePollResults(poll);
 

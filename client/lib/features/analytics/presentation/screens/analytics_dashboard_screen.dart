@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/socket_client.dart';
@@ -32,6 +34,7 @@ class AnalyticsDashboardScreen extends StatefulWidget {
 class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
     with SingleTickerProviderStateMixin {
   final _apiClient = sl<ApiClient>();
+  final _socketClient = sl<SocketClient>();
   late TabController _tabController;
 
   Map<String, dynamic>? _session;
@@ -41,6 +44,17 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   bool _isLoading = true;
   bool _isSavingSettings = false;
+  bool _isSocketConnected = false;
+  String? _recentLiveToast;
+
+  StreamSubscription<bool>? _connectionSub;
+  StreamSubscription<Map<String, dynamic>>? _votesSub;
+  StreamSubscription<Map<String, dynamic>>? _qaCreatedSub;
+  StreamSubscription<Map<String, dynamic>>? _qaStatusSub;
+  StreamSubscription<Map<String, dynamic>>? _qaUpvotedSub;
+  StreamSubscription<Map<String, dynamic>>? _participantSub;
+  StreamSubscription<Map<String, dynamic>?>? _pollActivationSub;
+  StreamSubscription<Map<String, dynamic>>? _sessionStateSub;
 
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
@@ -51,6 +65,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _setupSocketListeners();
     _loadAnalytics();
     _participantSearchController.addListener(() {
       setState(() {
@@ -61,11 +76,279 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   @override
   void dispose() {
+    _connectionSub?.cancel();
+    _votesSub?.cancel();
+    _qaCreatedSub?.cancel();
+    _qaStatusSub?.cancel();
+    _qaUpvotedSub?.cancel();
+    _participantSub?.cancel();
+    _pollActivationSub?.cancel();
+    _sessionStateSub?.cancel();
     _tabController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _participantSearchController.dispose();
     super.dispose();
+  }
+
+  void _setupSocketListeners() {
+    _connectionSub?.cancel();
+    _votesSub?.cancel();
+    _qaCreatedSub?.cancel();
+    _qaStatusSub?.cancel();
+    _qaUpvotedSub?.cancel();
+    _participantSub?.cancel();
+    _pollActivationSub?.cancel();
+    _sessionStateSub?.cancel();
+
+    _connectionSub = _socketClient.connectionStream.listen((connected) {
+      if (!mounted) return;
+      setState(() {
+        _isSocketConnected = connected;
+      });
+    });
+
+    _votesSub = _socketClient.votesUpdatedStream.listen((data) {
+      if (!mounted || _analyticsData == null) return;
+      final pollId = data['pollId']?.toString();
+      final results = data['results'] as Map<String, dynamic>?;
+      final totalVotes = data['totalVotes'] as int?;
+      final recentResponse = data['recentResponse'] as Map<String, dynamic>?;
+
+      setState(() {
+        final metrics =
+            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
+        if (totalVotes != null) {
+          metrics['totalVotes'] = totalVotes;
+        } else {
+          metrics['totalVotes'] = (metrics['totalVotes'] as int? ?? 0) + 1;
+        }
+
+        final totalParticipants = metrics['totalParticipants'] as int? ?? 1;
+        final currentVotes = metrics['totalVotes'] as int? ?? 0;
+        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
+        metrics['averageEngagement'] = totalParticipants > 0
+            ? double.parse(
+                ((currentVotes + currentQuestions) / totalParticipants)
+                    .toStringAsFixed(2),
+              )
+            : 0.0;
+        _analyticsData!['metrics'] = metrics;
+
+        // 1. Update matching poll in _polls
+        if (pollId != null && results != null) {
+          for (var i = 0; i < _polls.length; i++) {
+            if (_polls[i]['id']?.toString() == pollId) {
+              final updatedPoll = Map<String, dynamic>.from(_polls[i]);
+              updatedPoll['results'] = results;
+              _polls[i] = updatedPoll;
+            }
+          }
+
+          // Update in pollStats
+          final pollStats = List<Map<String, dynamic>>.from(
+            (_analyticsData!['pollStats'] as List? ?? []).map(
+              (e) => Map<String, dynamic>.from(e as Map),
+            ),
+          );
+          for (var i = 0; i < pollStats.length; i++) {
+            if (pollStats[i]['id']?.toString() == pollId) {
+              pollStats[i]['votesCount'] =
+                  (pollStats[i]['votesCount'] as int? ?? 0) + 1;
+            }
+          }
+          _analyticsData!['pollStats'] = pollStats;
+        }
+
+        // 2. Prepend recent response
+        if (recentResponse != null) {
+          final recent = List<Map<String, dynamic>>.from(
+            (_analyticsData!['recentResponses'] as List? ?? []).map(
+              (e) => Map<String, dynamic>.from(e as Map),
+            ),
+          );
+          recent.insert(0, recentResponse);
+          if (recent.length > 10) recent.removeLast();
+          _analyticsData!['recentResponses'] = recent;
+
+          _showLiveToast(
+            'New vote from ${recentResponse['participantName'] ?? 'Attendee'}',
+          );
+        } else {
+          _showLiveToast('New vote received');
+        }
+      });
+    });
+
+    _participantSub = _socketClient.participantJoinedStream.listen((data) {
+      if (!mounted || _analyticsData == null) return;
+      final newParticipant = data['participant'] as Map<String, dynamic>?;
+      final totalParticipants = data['totalParticipants'] as int?;
+
+      setState(() {
+        final metrics =
+            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
+        if (totalParticipants != null) {
+          metrics['totalParticipants'] = totalParticipants;
+        } else {
+          metrics['totalParticipants'] =
+              (metrics['totalParticipants'] as int? ?? 0) + 1;
+        }
+
+        final currentParticipants = metrics['totalParticipants'] as int? ?? 1;
+        final currentVotes = metrics['totalVotes'] as int? ?? 0;
+        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
+        metrics['averageEngagement'] = currentParticipants > 0
+            ? double.parse(
+                ((currentVotes + currentQuestions) / currentParticipants)
+                    .toStringAsFixed(2),
+              )
+            : 0.0;
+        _analyticsData!['metrics'] = metrics;
+
+        if (newParticipant != null) {
+          final list = List<Map<String, dynamic>>.from(
+            (_analyticsData!['participantsList'] as List? ?? []).map(
+              (e) => Map<String, dynamic>.from(e as Map),
+            ),
+          );
+          final exists = list.any(
+            (p) => p['id']?.toString() == newParticipant['id']?.toString(),
+          );
+          if (!exists) {
+            list.insert(0, newParticipant);
+            _analyticsData!['participantsList'] = list;
+            _showLiveToast(
+              '${newParticipant['name'] ?? 'Attendee'} joined session',
+            );
+          }
+        } else {
+          _showLiveToast('New attendee joined session');
+        }
+      });
+    });
+
+    _qaCreatedSub = _socketClient.questionCreatedStream.listen((data) {
+      if (!mounted || _analyticsData == null) return;
+      final q = data['question'] as Map<String, dynamic>?;
+      if (q == null) return;
+
+      setState(() {
+        final metrics =
+            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
+        metrics['totalQuestions'] =
+            (metrics['totalQuestions'] as int? ?? 0) + 1;
+
+        final totalParticipants = metrics['totalParticipants'] as int? ?? 1;
+        final currentVotes = metrics['totalVotes'] as int? ?? 0;
+        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
+        metrics['averageEngagement'] = totalParticipants > 0
+            ? double.parse(
+                ((currentVotes + currentQuestions) / totalParticipants)
+                    .toStringAsFixed(2),
+              )
+            : 0.0;
+        _analyticsData!['metrics'] = metrics;
+
+        final exists = _questions.any(
+          (item) => item['id']?.toString() == q['id']?.toString(),
+        );
+        if (!exists) {
+          _questions.insert(0, q);
+          _showLiveToast(
+            'New question from ${q['authorName'] ?? 'Anonymous'}',
+          );
+        }
+      });
+    });
+
+    _qaStatusSub = _socketClient.questionStatusStream.listen((data) {
+      if (!mounted) return;
+      final q = data['question'] as Map<String, dynamic>?;
+      if (q == null) return;
+      final qId = q['id']?.toString();
+
+      setState(() {
+        for (var i = 0; i < _questions.length; i++) {
+          if (_questions[i]['id']?.toString() == qId) {
+            _questions[i] = Map<String, dynamic>.from(q);
+          }
+        }
+      });
+    });
+
+    _qaUpvotedSub = _socketClient.questionUpvotedStream.listen((data) {
+      if (!mounted) return;
+      final qId = data['questionId']?.toString();
+      final count = data['upvotesCount'] as int?;
+
+      if (qId != null && count != null) {
+        setState(() {
+          for (var i = 0; i < _questions.length; i++) {
+            if (_questions[i]['id']?.toString() == qId) {
+              final updated = Map<String, dynamic>.from(_questions[i]);
+              updated['upvotesCount'] = count;
+              _questions[i] = updated;
+            }
+          }
+        });
+      }
+    });
+
+    _pollActivationSub = _socketClient.pollActivationStream.listen((data) {
+      if (!mounted) return;
+      final poll = data != null ? data['poll'] as Map<String, dynamic>? : null;
+      setState(() {
+        if (poll != null) {
+          final activeId = poll['id']?.toString();
+          for (var i = 0; i < _polls.length; i++) {
+            final p = Map<String, dynamic>.from(_polls[i]);
+            if (p['id']?.toString() == activeId) {
+              p['status'] = 'active';
+              if (poll['results'] != null) p['results'] = poll['results'];
+            } else if (p['status'] == 'active') {
+              p['status'] = 'ended';
+            }
+            _polls[i] = p;
+          }
+          _showLiveToast('Poll activated: ${poll['title'] ?? ''}');
+        } else {
+          for (var i = 0; i < _polls.length; i++) {
+            final p = Map<String, dynamic>.from(_polls[i]);
+            if (p['status'] == 'active') {
+              p['status'] = 'ended';
+            }
+            _polls[i] = p;
+          }
+          _showLiveToast('Active poll ended');
+        }
+      });
+    });
+
+    _sessionStateSub = _socketClient.sessionStateStream.listen((data) {
+      if (!mounted || _session == null) return;
+      final state = data['state'] as String?;
+      if (state != null) {
+        setState(() {
+          _session!['state'] = state;
+          _showLiveToast('Session status: ${state.toUpperCase()}');
+        });
+      }
+    });
+  }
+
+  void _showLiveToast(String message) {
+    if (!mounted) return;
+    setState(() {
+      _recentLiveToast = message;
+    });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _recentLiveToast == message) {
+        setState(() {
+          _recentLiveToast = null;
+        });
+      }
+    });
   }
 
   Future<void> _loadAnalytics() async {
@@ -93,6 +376,12 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           _descController.text = session['description'] as String? ?? '';
           _isLoading = false;
         });
+
+        // Join socket room for live sync
+        final code = session['access_code'] as String? ?? widget.sessionId;
+        _socketClient.connect();
+        _socketClient.joinSession(code, 'analytics_host', 'host');
+        _isSocketConnected = _socketClient.isConnected;
       }
     } catch (e) {
       if (!mounted) return;
@@ -596,7 +885,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   },
                   icon: const Icon(Icons.settings_rounded, size: 20),
                   label: const Text(
-                    'Session Settings',
+                    'Settings',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
@@ -1078,114 +1367,117 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       engColor = AppColors.warning;
     }
 
-    return Builder(
-      builder: (context) {
-        final double screenWidth = MediaQuery.of(context).size.width;
-        final double availableWidth = screenWidth > 800 ? (screenWidth - 320) : (screenWidth - 32);
-        final double cardWidth = (availableWidth - 16) / 2;
-        return Wrap(
-          spacing: 16,
-          runSpacing: 16,
+    final card1 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.people_outline_rounded,
+      iconBgColor: AppColors.primary.withValues(alpha: 0.08),
+      iconColor: AppColors.primary,
+      value: '$participantsCount',
+      label: 'Total Users',
+      footerWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: AppColors.success,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'Live tracking',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.success,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final card2 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.insights_rounded,
+      iconBgColor: engColor.withValues(alpha: 0.08),
+      iconColor: engColor,
+      value: '${(averageEngagement * 10).clamp(0, 100).toInt()}%',
+      label: 'Engagement Rate',
+      footerWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: engColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$engLabel activity',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: engColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final card3 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.how_to_vote_rounded,
+      iconBgColor: AppColors.secondary.withValues(alpha: 0.08),
+      iconColor: AppColors.secondary,
+      value: '$totalVotes',
+      label: 'Votes Cast',
+      footerWidget: Text(
+        'Across all polls',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+      ),
+    );
+
+    final card4 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.timer_outlined,
+      iconBgColor: AppColors.purpleAccent.withValues(alpha: 0.08),
+      iconColor: AppColors.purpleAccent,
+      value: _getMockAvgTime(participantsCount, totalVotes),
+      label: 'Avg Response Time',
+      footerWidget: Text(
+        'Per response',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+      ),
+    );
+
+    return Column(
+      children: [
+        Row(
           children: [
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.people_outline_rounded,
-              iconBgColor: AppColors.primary.withValues(alpha: 0.08),
-              iconColor: AppColors.primary,
-              value: '$participantsCount',
-              label: 'Total Users',
-              footerWidget: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Live tracking',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.insights_rounded,
-              iconBgColor: engColor.withValues(alpha: 0.08),
-              iconColor: engColor,
-              value: '${(averageEngagement * 10).clamp(0, 100).toInt()}%',
-              label: 'Engagement Rate',
-              footerWidget: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: engColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$engLabel activity',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: engColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.how_to_vote_rounded,
-              iconBgColor: AppColors.secondary.withValues(alpha: 0.08),
-              iconColor: AppColors.secondary,
-              value: '$totalVotes',
-              label: 'Votes Cast',
-              footerWidget: Text(
-                'Across all polls',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                ),
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.timer_outlined,
-              iconBgColor: AppColors.purpleAccent.withValues(alpha: 0.08),
-              iconColor: AppColors.purpleAccent,
-              value: _getMockAvgTime(participantsCount, totalVotes),
-              label: 'Avg Response Time',
-              footerWidget: Text(
-                'Per response',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                ),
-              ),
-            ),
+            Expanded(child: card1),
+            const SizedBox(width: 12),
+            Expanded(child: card2),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: card3),
+            const SizedBox(width: 12),
+            Expanded(child: card4),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1199,7 +1491,6 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   Widget _buildStatCard({
     required bool isDark,
-    required double width,
     required IconData icon,
     required Color iconBgColor,
     required Color iconColor,
@@ -1208,8 +1499,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
     required Widget footerWidget,
   }) {
     return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1238,9 +1528,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   color: iconBgColor,
                   borderRadius: BorderRadius.circular(8),
@@ -1249,17 +1539,21 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : AppColors.textPrimaryLight,
-              letterSpacing: -0.5,
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                letterSpacing: -0.5,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           footerWidget,
         ],
       ),

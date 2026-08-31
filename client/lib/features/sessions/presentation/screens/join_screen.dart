@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:ui';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +13,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/utils/error_handler.dart';
+import '../../../../core/widgets/animated_scale_button.dart';
+import '../../../../core/widgets/background_dots_painter.dart';
+import '../../../../core/widgets/qlix_button.dart';
 import '../blocs/session_bloc.dart';
 
 class ParticipantJoinScreen extends StatefulWidget {
@@ -143,7 +146,9 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
 
           // 2. Subtle background dots detailing
           Positioned.fill(
-            child: CustomPaint(painter: _BackgroundDotsPainter(seed: 77)),
+            child: CustomPaint(
+              painter: BackgroundDotsPainter(seed: 77),
+            ),
           ),
 
           // 4. Content Scroll Area
@@ -224,17 +229,21 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
             },
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSizes.space20,
-                  vertical: 16,
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSizes.pageHorizontalPadding(context),
+                  vertical: context.hPct(2).clamp(12.0, 24.0),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 20),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: AppSizes.maxFormWidth(context),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(height: context.hPct(2).clamp(12.0, 24.0)),
 
-                    // Top Card Illustration
-                    _buildTopIllustration()
+                      // Top Card Illustration
+                      _buildTopIllustration()
                         .animate()
                         .fadeIn(duration: 500.ms)
                         .scale(
@@ -360,79 +369,44 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                               // Main Join Session button
                               BlocBuilder<SessionBloc, SessionState>(
                                     builder: (context, state) {
-                                      if (state is SessionLoading) {
-                                        return const Center(
-                                          child: CircularProgressIndicator(
-                                            color: AppColors.primary,
-                                          ),
-                                        );
-                                      }
-
-                                      return _AnimatedScaleButton(
+                                      return QlixButton.primary(
+                                        text: AppStrings.joinSessionButton,
+                                        isLoading: state is SessionLoading,
                                         onPressed: _joinSession,
-                                        child: Container(
-                                          height: 48,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                            gradient: const LinearGradient(
-                                              colors: AppColors.primaryGradient,
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: AppColors.primary
-                                                    .withValues(alpha: 0.25),
-                                                blurRadius: 12,
-                                                offset: const Offset(0, 4),
-                                              ),
-                                            ],
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: const Text(
-                                            'Join Session',
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ),
                                       );
                                     },
                                   )
                                   .animate()
                                   .fadeIn(delay: 200.ms, duration: 400.ms)
                                   .slideY(begin: 0.1, end: 0),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: AppSizes.space12),
 
                               // OR Divider
                               Row(
                                 children: const [
                                   Expanded(
                                     child: Divider(
-                                      color: Color(0xFFE2E8F0),
+                                      color: AppColors.divider,
                                       thickness: 1.5,
                                     ),
                                   ),
                                   Padding(
                                     padding: EdgeInsets.symmetric(
-                                      horizontal: 16,
+                                      horizontal: AppSizes.space16,
                                     ),
                                     child: Text(
-                                      'OR',
+                                      AppStrings.or,
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF94A3B8),
+                                        color: AppColors.textPlaceholder,
                                         letterSpacing: 0.5,
                                       ),
                                     ),
                                   ),
                                   Expanded(
                                     child: Divider(
-                                      color: Color(0xFFE2E8F0),
+                                      color: AppColors.divider,
                                       thickness: 1.5,
                                     ),
                                   ),
@@ -444,7 +418,7 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
                               const SizedBox(height: 12),
 
                               // Scan QR Code Option inside Card
-                              _AnimatedScaleButton(
+                              AnimatedScaleButton(
                                     onPressed: _openQRScanner,
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
@@ -535,9 +509,10 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
   }
 
   Widget _buildTopIllustration() {
@@ -824,32 +799,6 @@ class _ParticipantJoinScreenState extends State<ParticipantJoinScreen> {
   }
 }
 
-// Subtle light mode decorative background painter
-class _BackgroundDotsPainter extends CustomPainter {
-  final int seed;
-
-  _BackgroundDotsPainter({required this.seed});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint();
-    final rand = math.Random(seed);
-
-    for (int i = 0; i < 20; i++) {
-      final x = rand.nextDouble() * size.width;
-      final y = rand.nextDouble() * size.height;
-      final radius = rand.nextDouble() * 2.0 + 0.5;
-      final opacity = rand.nextDouble() * 0.08 + 0.02;
-
-      paint.color = AppColors.primary.withValues(alpha: opacity);
-      canvas.drawCircle(Offset(x, y), radius, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _QrScannerDialog extends StatefulWidget {
   final ValueChanged<String> onCodeScanned;
 
@@ -927,6 +876,7 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
           if (sessionCode != null) {
             _isScanned = true;
             widget.onCodeScanned(sessionCode);
+            if (!mounted) return;
             Navigator.pop(context);
             return;
           } else {
@@ -1026,7 +976,7 @@ class _QrScannerDialogState extends State<_QrScannerDialog> {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      _AnimatedScaleButton(
+                      AnimatedScaleButton(
                         onPressed: () => Navigator.pop(context),
                         child: Container(
                           padding: const EdgeInsets.all(6),
@@ -1396,7 +1346,7 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Flash/Torch Toggle
-                      _AnimatedScaleButton(
+                      AnimatedScaleButton(
                         onPressed: () => widget.controller.toggleTorch(),
                         child: Container(
                           width: 50,
@@ -1435,7 +1385,7 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                       ),
                       const SizedBox(width: 20),
                       // Gallery Picker
-                      _AnimatedScaleButton(
+                      AnimatedScaleButton(
                         onPressed: widget.onUploadPressed,
                         child: Container(
                           width: 50,
@@ -1457,7 +1407,7 @@ class _ScannerOverlayState extends State<_ScannerOverlay>
                       ),
                       const SizedBox(width: 20),
                       // Camera Flip
-                      _AnimatedScaleButton(
+                      AnimatedScaleButton(
                         onPressed: () => widget.controller.switchCamera(),
                         child: Container(
                           width: 50,
@@ -1759,7 +1709,7 @@ class _NamePromptSheetState extends State<_NamePromptSheet> {
               onFieldSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 20),
-            _AnimatedScaleButton(
+            AnimatedScaleButton(
               onPressed: _isEmpty ? null : _submit,
               child: Container(
                 height: 50,
@@ -1928,13 +1878,13 @@ class _PinCodeFieldState extends State<_PinCodeField> {
 
               return Expanded(
                 child: Container(
-                  height: 54,
+                  height: context.rSize(52, minScale: 0.85, maxScale: 1.15),
                   margin: EdgeInsets.symmetric(
-                    horizontal: index == 0 || index == 5 ? 0 : 4,
+                    horizontal: index == 0 || index == 5 ? 0 : (context.isSmallMobile ? 2.5 : 4.0),
                   ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppSizes.radiusInput),
                     border: Border.all(color: borderColor, width: borderWidth),
                     boxShadow: boxShadow,
                   ),
@@ -1945,8 +1895,8 @@ class _PinCodeFieldState extends State<_PinCodeField> {
                       if (digit.isNotEmpty)
                         Text(
                           digit,
-                          style: const TextStyle(
-                            fontSize: 20,
+                          style: TextStyle(
+                            fontSize: context.rSize(20, minScale: 0.85, maxScale: 1.15),
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimaryLight,
                           ),
@@ -2012,36 +1962,6 @@ class _BlinkingCursorState extends State<_BlinkingCursor>
     return FadeTransition(
       opacity: _controller,
       child: Container(width: 2.2, height: 20, color: AppColors.primary),
-    );
-  }
-}
-
-// Press scaling helper button
-class _AnimatedScaleButton extends StatefulWidget {
-  final Widget child;
-  final VoidCallback? onPressed;
-
-  const _AnimatedScaleButton({required this.child, this.onPressed});
-
-  @override
-  State<_AnimatedScaleButton> createState() => _AnimatedScaleButtonState();
-}
-
-class _AnimatedScaleButtonState extends State<_AnimatedScaleButton> {
-  double _scale = 1.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.96),
-      onTapUp: (_) => setState(() => _scale = 1.0),
-      onTapCancel: () => setState(() => _scale = 1.0),
-      onTap: widget.onPressed,
-      child: AnimatedScale(
-        scale: _scale,
-        duration: const Duration(milliseconds: 100),
-        child: widget.child,
-      ),
     );
   }
 }
