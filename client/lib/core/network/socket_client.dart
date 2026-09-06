@@ -1,20 +1,16 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:get_it/get_it.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:socket_io_client/socket_io_client.dart' as io;
-import '../storage/cache_manager.dart';
 
 class SocketClient {
   io.Socket? _socket;
 
-  static String get defaultHost {
-    if (kIsWeb) return 'localhost';
-    return '10.225.134.64';
-  }
+  static const String defaultServerUrl = 'https://qlix-app.onrender.com';
+  static String get defaultHost => 'qlix-app.onrender.com';
 
   static String formatServerUrl(String input) {
     var raw = input.trim();
-    if (raw.isEmpty) return 'http://$defaultHost:3000';
+    if (raw.isEmpty) return defaultServerUrl;
 
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
       while (raw.endsWith('/')) {
@@ -47,19 +43,7 @@ class SocketClient {
     return 'http://$raw:3000';
   }
 
-  static String get serverUrl {
-    try {
-      final ip = GetIt.instance<CacheManager>().getServerIpOverride();
-      if (ip != null &&
-          ip.trim().isNotEmpty &&
-          ip.trim() != '10.202.235.64' &&
-          ip.trim() != '10.128.231.64' &&
-          ip.trim() != '10.109.186.64') {
-        return formatServerUrl(ip);
-      }
-    } catch (_) {}
-    return formatServerUrl(defaultHost);
-  }
+  static String get serverUrl => defaultServerUrl;
 
   void disconnect() {
     _socket?.disconnect();

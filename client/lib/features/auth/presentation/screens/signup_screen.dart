@@ -9,7 +9,6 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/qlix_button.dart';
 import '../../../../core/widgets/qlix_text_field.dart';
-import '../../../../core/network/network_settings_dialog.dart';
 import '../blocs/auth_bloc.dart';
 import '../widgets/auth_header_widgets.dart';
 
@@ -209,19 +208,6 @@ class _HostSignupScreenState extends State<HostSignupScreen> {
                   ],
                 ),
               ),
-            ),
-          ),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            right: 16,
-            child: IconButton(
-              icon: const Icon(
-                AppIcons.serverSettings,
-                color: AppColors.textMuted,
-                size: AppSizes.iconMedium,
-              ),
-              tooltip: AppStrings.serverSettings,
-              onPressed: () => showNetworkSettingsDialog(context),
             ),
           ),
         ],
