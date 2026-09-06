@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies including production locks
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Copy database schema file required by sqlite/mongodb bridge
 COPY schema.sql ./
