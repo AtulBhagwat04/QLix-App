@@ -1,25 +1,31 @@
-# Production Build Stage
+# Build Stage - compile native C/C++ dependencies (sqlite3) against the container's glibc
+FROM node:20-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install --omit=dev --build-from-source=sqlite3
+
+# Production Runtime Stage
 FROM node:20-slim
 
 WORKDIR /app
 
-# Copy package descriptors and lockfiles
+COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
-
-# Install dependencies including production locks
-RUN npm install --omit=dev
-
-# Copy database schema file required by sqlite/mongodb bridge
 COPY schema.sql ./
-
-# Copy application source code
 COPY src/ ./src/
 
-# Expose HTTP Port
 EXPOSE 3000 10000
 
 ENV NODE_ENV=production
 
-# Run node entrypoint server.js
 CMD ["node", "src/server.js"]
 
