@@ -36,10 +36,11 @@ if (process.env.NODE_ENV !== 'production') {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health Check API
-app.get('/health', (req, res) => {
+// Health Check & Root API
+app.get(['/', '/health'], (req, res) => {
   res.status(200).json({
     status: 'ok',
+    service: 'QLix Backend API',
     timestamp: new Date().toISOString(),
   });
 });
