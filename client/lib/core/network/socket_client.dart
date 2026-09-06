@@ -12,6 +12,41 @@ class SocketClient {
     return '10.225.134.64';
   }
 
+  static String formatServerUrl(String input) {
+    var raw = input.trim();
+    if (raw.isEmpty) return 'http://$defaultHost:3000';
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        raw = raw.substring(0, raw.length - 4);
+      }
+      return raw;
+    }
+
+    final isDomain = raw.contains('.onrender.com') ||
+        (raw.contains('.') &&
+            !RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').hasMatch(raw) &&
+            !raw.contains(':'));
+
+    if (isDomain) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        raw = raw.substring(0, raw.length - 4);
+      }
+      return 'https://$raw';
+    }
+
+    if (raw.contains(':')) {
+      return 'http://$raw';
+    }
+    return 'http://$raw:3000';
+  }
+
   static String get serverUrl {
     try {
       final ip = GetIt.instance<CacheManager>().getServerIpOverride();
@@ -20,10 +55,10 @@ class SocketClient {
           ip.trim() != '10.202.235.64' &&
           ip.trim() != '10.128.231.64' &&
           ip.trim() != '10.109.186.64') {
-        return 'http://${ip.trim()}:3000';
+        return formatServerUrl(ip);
       }
     } catch (_) {}
-    return 'http://$defaultHost:3000';
+    return formatServerUrl(defaultHost);
   }
 
   void disconnect() {
@@ -57,8 +92,6 @@ class SocketClient {
       StreamController<Map<String, dynamic>>.broadcast();
   final _sessionStateController =
       StreamController<Map<String, dynamic>>.broadcast();
-  final _participantJoinedController =
-      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>?> get pollActivationStream =>
@@ -78,8 +111,6 @@ class SocketClient {
       _announcementController.stream;
   Stream<Map<String, dynamic>> get sessionStateStream =>
       _sessionStateController.stream;
-  Stream<Map<String, dynamic>> get participantJoinedStream =>
-      _participantJoinedController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -93,7 +124,7 @@ class SocketClient {
     _socket = io.io(
       serverUrl,
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(['websocket', 'polling'])
           .disableAutoConnect()
           .enableReconnection()
           .setReconnectionDelay(2000)
@@ -175,12 +206,6 @@ class SocketClient {
     _socket!.on('session_state_changed', (data) {
       if (data != null) {
         _sessionStateController.add(Map<String, dynamic>.from(data as Map));
-      }
-    });
-
-    _socket!.on('participant_joined_ack', (data) {
-      if (data != null) {
-        _participantJoinedController.add(Map<String, dynamic>.from(data as Map));
       }
     });
 
@@ -313,6 +338,5 @@ class SocketClient {
     _quizTimerController.close();
     _announcementController.close();
     _sessionStateController.close();
-    _participantJoinedController.close();
   }
 }

@@ -3,7 +3,6 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../core/network/socket_client.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
@@ -574,7 +573,7 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               ],
             ),
             child: QrImageView(
-              data: 'http://${ApiClient.defaultHost}:3000/session/$code',
+              data: '${SocketClient.serverUrl}/session/$code',
               version: QrVersions.auto,
               size: 64,
               gapless: false,

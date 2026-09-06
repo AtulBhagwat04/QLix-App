@@ -1827,7 +1827,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                   ],
                 ),
                 child: QrImageView(
-                  data: 'http://${ApiClient.defaultHost}:3000/session/$code',
+                  data: '${SocketClient.serverUrl}/session/$code',
                   version: QrVersions.auto,
                   size: 200,
                   gapless: false,

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -10,7 +9,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/socket_client.dart';
@@ -34,7 +32,6 @@ class AnalyticsDashboardScreen extends StatefulWidget {
 class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
     with SingleTickerProviderStateMixin {
   final _apiClient = sl<ApiClient>();
-  final _socketClient = sl<SocketClient>();
   late TabController _tabController;
 
   Map<String, dynamic>? _session;
@@ -44,17 +41,6 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   bool _isLoading = true;
   bool _isSavingSettings = false;
-  bool _isSocketConnected = false;
-  String? _recentLiveToast;
-
-  StreamSubscription<bool>? _connectionSub;
-  StreamSubscription<Map<String, dynamic>>? _votesSub;
-  StreamSubscription<Map<String, dynamic>>? _qaCreatedSub;
-  StreamSubscription<Map<String, dynamic>>? _qaStatusSub;
-  StreamSubscription<Map<String, dynamic>>? _qaUpvotedSub;
-  StreamSubscription<Map<String, dynamic>>? _participantSub;
-  StreamSubscription<Map<String, dynamic>?>? _pollActivationSub;
-  StreamSubscription<Map<String, dynamic>>? _sessionStateSub;
 
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
@@ -65,7 +51,6 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
-    _setupSocketListeners();
     _loadAnalytics();
     _participantSearchController.addListener(() {
       setState(() {
@@ -76,14 +61,6 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   @override
   void dispose() {
-    _connectionSub?.cancel();
-    _votesSub?.cancel();
-    _qaCreatedSub?.cancel();
-    _qaStatusSub?.cancel();
-    _qaUpvotedSub?.cancel();
-    _participantSub?.cancel();
-    _pollActivationSub?.cancel();
-    _sessionStateSub?.cancel();
     _tabController.dispose();
     _titleController.dispose();
     _descController.dispose();
@@ -91,300 +68,82 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
     super.dispose();
   }
 
-  void _setupSocketListeners() {
-    _connectionSub?.cancel();
-    _votesSub?.cancel();
-    _qaCreatedSub?.cancel();
-    _qaStatusSub?.cancel();
-    _qaUpvotedSub?.cancel();
-    _participantSub?.cancel();
-    _pollActivationSub?.cancel();
-    _sessionStateSub?.cancel();
-
-    _connectionSub = _socketClient.connectionStream.listen((connected) {
-      if (!mounted) return;
-      setState(() {
-        _isSocketConnected = connected;
-      });
-    });
-
-    _votesSub = _socketClient.votesUpdatedStream.listen((data) {
-      if (!mounted || _analyticsData == null) return;
-      final pollId = data['pollId']?.toString();
-      final results = data['results'] as Map<String, dynamic>?;
-      final totalVotes = data['totalVotes'] as int?;
-      final recentResponse = data['recentResponse'] as Map<String, dynamic>?;
-
-      setState(() {
-        final metrics =
-            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
-        if (totalVotes != null) {
-          metrics['totalVotes'] = totalVotes;
-        } else {
-          metrics['totalVotes'] = (metrics['totalVotes'] as int? ?? 0) + 1;
-        }
-
-        final totalParticipants = metrics['totalParticipants'] as int? ?? 1;
-        final currentVotes = metrics['totalVotes'] as int? ?? 0;
-        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
-        metrics['averageEngagement'] = totalParticipants > 0
-            ? double.parse(
-                ((currentVotes + currentQuestions) / totalParticipants)
-                    .toStringAsFixed(2),
-              )
-            : 0.0;
-        _analyticsData!['metrics'] = metrics;
-
-        // 1. Update matching poll in _polls
-        if (pollId != null && results != null) {
-          for (var i = 0; i < _polls.length; i++) {
-            if (_polls[i]['id']?.toString() == pollId) {
-              final updatedPoll = Map<String, dynamic>.from(_polls[i]);
-              updatedPoll['results'] = results;
-              _polls[i] = updatedPoll;
-            }
-          }
-
-          // Update in pollStats
-          final pollStats = List<Map<String, dynamic>>.from(
-            (_analyticsData!['pollStats'] as List? ?? []).map(
-              (e) => Map<String, dynamic>.from(e as Map),
-            ),
-          );
-          for (var i = 0; i < pollStats.length; i++) {
-            if (pollStats[i]['id']?.toString() == pollId) {
-              pollStats[i]['votesCount'] =
-                  (pollStats[i]['votesCount'] as int? ?? 0) + 1;
-            }
-          }
-          _analyticsData!['pollStats'] = pollStats;
-        }
-
-        // 2. Prepend recent response
-        if (recentResponse != null) {
-          final recent = List<Map<String, dynamic>>.from(
-            (_analyticsData!['recentResponses'] as List? ?? []).map(
-              (e) => Map<String, dynamic>.from(e as Map),
-            ),
-          );
-          recent.insert(0, recentResponse);
-          if (recent.length > 10) recent.removeLast();
-          _analyticsData!['recentResponses'] = recent;
-
-          _showLiveToast(
-            'New vote from ${recentResponse['participantName'] ?? 'Attendee'}',
-          );
-        } else {
-          _showLiveToast('New vote received');
-        }
-      });
-    });
-
-    _participantSub = _socketClient.participantJoinedStream.listen((data) {
-      if (!mounted || _analyticsData == null) return;
-      final newParticipant = data['participant'] as Map<String, dynamic>?;
-      final totalParticipants = data['totalParticipants'] as int?;
-
-      setState(() {
-        final metrics =
-            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
-        if (totalParticipants != null) {
-          metrics['totalParticipants'] = totalParticipants;
-        } else {
-          metrics['totalParticipants'] =
-              (metrics['totalParticipants'] as int? ?? 0) + 1;
-        }
-
-        final currentParticipants = metrics['totalParticipants'] as int? ?? 1;
-        final currentVotes = metrics['totalVotes'] as int? ?? 0;
-        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
-        metrics['averageEngagement'] = currentParticipants > 0
-            ? double.parse(
-                ((currentVotes + currentQuestions) / currentParticipants)
-                    .toStringAsFixed(2),
-              )
-            : 0.0;
-        _analyticsData!['metrics'] = metrics;
-
-        if (newParticipant != null) {
-          final list = List<Map<String, dynamic>>.from(
-            (_analyticsData!['participantsList'] as List? ?? []).map(
-              (e) => Map<String, dynamic>.from(e as Map),
-            ),
-          );
-          final exists = list.any(
-            (p) => p['id']?.toString() == newParticipant['id']?.toString(),
-          );
-          if (!exists) {
-            list.insert(0, newParticipant);
-            _analyticsData!['participantsList'] = list;
-            _showLiveToast(
-              '${newParticipant['name'] ?? 'Attendee'} joined session',
-            );
-          }
-        } else {
-          _showLiveToast('New attendee joined session');
-        }
-      });
-    });
-
-    _qaCreatedSub = _socketClient.questionCreatedStream.listen((data) {
-      if (!mounted || _analyticsData == null) return;
-      final q = data['question'] as Map<String, dynamic>?;
-      if (q == null) return;
-
-      setState(() {
-        final metrics =
-            Map<String, dynamic>.from(_analyticsData!['metrics'] as Map);
-        metrics['totalQuestions'] =
-            (metrics['totalQuestions'] as int? ?? 0) + 1;
-
-        final totalParticipants = metrics['totalParticipants'] as int? ?? 1;
-        final currentVotes = metrics['totalVotes'] as int? ?? 0;
-        final currentQuestions = metrics['totalQuestions'] as int? ?? 0;
-        metrics['averageEngagement'] = totalParticipants > 0
-            ? double.parse(
-                ((currentVotes + currentQuestions) / totalParticipants)
-                    .toStringAsFixed(2),
-              )
-            : 0.0;
-        _analyticsData!['metrics'] = metrics;
-
-        final exists = _questions.any(
-          (item) => item['id']?.toString() == q['id']?.toString(),
-        );
-        if (!exists) {
-          _questions.insert(0, q);
-          _showLiveToast(
-            'New question from ${q['authorName'] ?? 'Anonymous'}',
-          );
-        }
-      });
-    });
-
-    _qaStatusSub = _socketClient.questionStatusStream.listen((data) {
-      if (!mounted) return;
-      final q = data['question'] as Map<String, dynamic>?;
-      if (q == null) return;
-      final qId = q['id']?.toString();
-
-      setState(() {
-        for (var i = 0; i < _questions.length; i++) {
-          if (_questions[i]['id']?.toString() == qId) {
-            _questions[i] = Map<String, dynamic>.from(q);
-          }
-        }
-      });
-    });
-
-    _qaUpvotedSub = _socketClient.questionUpvotedStream.listen((data) {
-      if (!mounted) return;
-      final qId = data['questionId']?.toString();
-      final count = data['upvotesCount'] as int?;
-
-      if (qId != null && count != null) {
-        setState(() {
-          for (var i = 0; i < _questions.length; i++) {
-            if (_questions[i]['id']?.toString() == qId) {
-              final updated = Map<String, dynamic>.from(_questions[i]);
-              updated['upvotesCount'] = count;
-              _questions[i] = updated;
-            }
-          }
-        });
-      }
-    });
-
-    _pollActivationSub = _socketClient.pollActivationStream.listen((data) {
-      if (!mounted) return;
-      final poll = data != null ? data['poll'] as Map<String, dynamic>? : null;
-      setState(() {
-        if (poll != null) {
-          final activeId = poll['id']?.toString();
-          for (var i = 0; i < _polls.length; i++) {
-            final p = Map<String, dynamic>.from(_polls[i]);
-            if (p['id']?.toString() == activeId) {
-              p['status'] = 'active';
-              if (poll['results'] != null) p['results'] = poll['results'];
-            } else if (p['status'] == 'active') {
-              p['status'] = 'ended';
-            }
-            _polls[i] = p;
-          }
-          _showLiveToast('Poll activated: ${poll['title'] ?? ''}');
-        } else {
-          for (var i = 0; i < _polls.length; i++) {
-            final p = Map<String, dynamic>.from(_polls[i]);
-            if (p['status'] == 'active') {
-              p['status'] = 'ended';
-            }
-            _polls[i] = p;
-          }
-          _showLiveToast('Active poll ended');
-        }
-      });
-    });
-
-    _sessionStateSub = _socketClient.sessionStateStream.listen((data) {
-      if (!mounted || _session == null) return;
-      final state = data['state'] as String?;
-      if (state != null) {
-        setState(() {
-          _session!['state'] = state;
-          _showLiveToast('Session status: ${state.toUpperCase()}');
-        });
-      }
-    });
-  }
-
-  void _showLiveToast(String message) {
-    if (!mounted) return;
-    setState(() {
-      _recentLiveToast = message;
-    });
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted && _recentLiveToast == message) {
-        setState(() {
-          _recentLiveToast = null;
-        });
-      }
-    });
-  }
-
   Future<void> _loadAnalytics() async {
+    setState(() => _isLoading = true);
     try {
-      final session = await sl<SessionRepository>().getSessionDetails(
-        widget.sessionId,
-      );
-      final response = await _apiClient.dio.get(
-        '/analytics/session/${widget.sessionId}',
-      );
-      final questions = await sl<QaRepository>().getSessionQuestions(
-        widget.sessionId,
-      );
-      final polls = await sl<PollRepository>().getSessionPolls(
-        widget.sessionId,
-      );
+      // 1. Load Session Details
+      Map<String, dynamic>? session;
+      try {
+        session = await sl<SessionRepository>().getSessionDetails(
+          widget.sessionId,
+        );
+      } catch (_) {}
 
-      if (response.statusCode == 200 && response.data != null) {
-        setState(() {
-          _session = session;
-          _analyticsData = response.data['data'] as Map<String, dynamic>;
-          _questions = questions;
-          _polls = polls;
-          _titleController.text = session['title'] as String? ?? '';
-          _descController.text = session['description'] as String? ?? '';
-          _isLoading = false;
-        });
+      // 2. Load Session Analytics from server
+      Map<String, dynamic>? analyticsData;
+      try {
+        final response = await _apiClient.dio.get(
+          '/analytics/session/${widget.sessionId}',
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          analyticsData = response.data['data'] as Map<String, dynamic>?;
+        }
+      } catch (_) {}
 
-        // Join socket room for live sync
-        final code = session['access_code'] as String? ?? widget.sessionId;
-        _socketClient.connect();
-        _socketClient.joinSession(code, 'analytics_host', 'host');
-        _isSocketConnected = _socketClient.isConnected;
-      }
+      // 3. Load Q&A Questions
+      List<Map<String, dynamic>> questions = [];
+      try {
+        questions = await sl<QaRepository>().getSessionQuestions(
+          widget.sessionId,
+        );
+      } catch (_) {}
+
+      // 4. Load Polls
+      List<Map<String, dynamic>> polls = [];
+      try {
+        polls = await sl<PollRepository>().getSessionPolls(
+          widget.sessionId,
+        );
+      } catch (_) {}
+
+      // Fallback analytics data if server response wasn't available
+      analyticsData ??= {
+        'sessionId': widget.sessionId,
+        'metrics': {
+          'totalParticipants': int.tryParse(session?['participant_count']?.toString() ?? '0') ?? 0,
+          'totalVotes': polls.fold<int>(
+            0,
+            (sum, p) =>
+                sum + (int.tryParse(p['votes_count']?.toString() ?? '0') ?? 0),
+          ),
+          'totalQuestions': questions.length,
+          'averageEngagement': 0.0,
+        },
+        'pollStats': polls.map((p) => {
+          'id': p['id'],
+          'title': p['title'] ?? 'Poll',
+          'type': p['type'] ?? 'multiple_choice',
+          'status': p['status'] ?? 'draft',
+          'votesCount': int.tryParse(p['votes_count']?.toString() ?? '0') ?? 0,
+        }).toList(),
+        'activityTimeline': [],
+        'recentResponses': [],
+        'participantsList': [],
+      };
+
+      if (!mounted) return;
+      setState(() {
+        _session = session ?? {'id': widget.sessionId, 'title': 'Session Analytics', 'state': 'ended'};
+        _analyticsData = analyticsData;
+        _questions = questions;
+        _polls = polls;
+        _titleController.text = _session?['title'] as String? ?? '';
+        _descController.text = _session?['description'] as String? ?? '';
+        _isLoading = false;
+      });
     } catch (e) {
       if (!mounted) return;
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(AppError.from(e, context: 'analytics')),
@@ -426,10 +185,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   }
 
   Future<void> _exportPDF() async {
-    if (_analyticsData == null) return;
-
-    final metrics = _analyticsData!['metrics'] as Map<String, dynamic>;
-    final polls = _analyticsData!['pollStats'] as List? ?? [];
+    final metrics = (_analyticsData?['metrics'] as Map<String, dynamic>?) ?? {
+      'totalParticipants': 0,
+      'totalVotes': 0,
+      'totalQuestions': 0,
+      'averageEngagement': 0.0,
+    };
+    final polls = _analyticsData?['pollStats'] as List? ?? [];
 
     final pdf = pw.Document();
 
@@ -838,9 +600,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   }
 
   Widget _buildOverviewTab(bool isDark, String formattedCode) {
-    final metrics = _analyticsData!['metrics'] as Map<String, dynamic>;
-    final timeline = _analyticsData!['activityTimeline'] as List? ?? [];
-    final recentResponses = _analyticsData!['recentResponses'] as List? ?? [];
+    final metrics = (_analyticsData?['metrics'] as Map<String, dynamic>?) ?? {
+      'totalParticipants': 0,
+      'totalVotes': 0,
+      'totalQuestions': 0,
+      'averageEngagement': 0.0,
+    };
+    final timeline = _analyticsData?['activityTimeline'] as List? ?? [];
+    final recentResponses = _analyticsData?['recentResponses'] as List? ?? [];
     final code = _session?['access_code'] as String? ?? '000000';
 
     return SingleChildScrollView(

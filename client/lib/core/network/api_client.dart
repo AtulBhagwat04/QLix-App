@@ -13,6 +13,46 @@ class ApiClient {
     return '10.225.134.64';
   }
 
+  static String formatApiUrl(String input) {
+    var raw = input.trim();
+    if (raw.isEmpty) return 'http://$defaultHost:3000/api';
+
+    // If input already specifies http:// or https://
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        return raw;
+      }
+      return '$raw/api';
+    }
+
+    // If it's a domain name (e.g. *.onrender.com or custom domain)
+    final isDomain = raw.contains('.onrender.com') ||
+        (raw.contains('.') &&
+            !RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').hasMatch(raw) &&
+            !raw.contains(':'));
+
+    if (isDomain) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        return 'https://$raw';
+      }
+      return 'https://$raw/api';
+    }
+
+    // Local IP or host with explicit port
+    if (raw.contains(':')) {
+      return 'http://$raw/api';
+    }
+
+    // Default to port 3000 for local IP addresses
+    return 'http://$raw:3000/api';
+  }
+
   static String get baseUrl {
     try {
       final ip = GetIt.instance<CacheManager>().getServerIpOverride();
@@ -21,14 +61,14 @@ class ApiClient {
           ip.trim() != '10.202.235.64' &&
           ip.trim() != '10.128.231.64' &&
           ip.trim() != '10.109.186.64') {
-        return 'http://${ip.trim()}:3000/api';
+        return formatApiUrl(ip);
       }
     } catch (_) {}
-    return 'http://$defaultHost:3000/api';
+    return formatApiUrl(defaultHost);
   }
 
   void updateBaseUrl(String newIp) {
-    dio.options.baseUrl = 'http://$newIp:3000/api';
+    dio.options.baseUrl = formatApiUrl(newIp);
   }
 
   ApiClient(this._secureStorage) {

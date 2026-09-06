@@ -35,10 +35,17 @@ Future<String?> autoDetectServerIp() async {
   int completedCount = 0;
 
   for (final host in candidateHosts) {
-    if (host.trim().isEmpty) continue;
-    dio.get('http://${host.trim()}:3000/health').then((response) async {
+    final trimmedHost = host.trim();
+    if (trimmedHost.isEmpty) continue;
+    final checkUrl = trimmedHost.startsWith('http://') || trimmedHost.startsWith('https://')
+        ? '${trimmedHost.replaceAll(RegExp(r'/+$'), '')}/health'
+        : (trimmedHost.contains('.onrender.com')
+            ? 'https://$trimmedHost/health'
+            : 'http://$trimmedHost:3000/health');
+
+    dio.get(checkUrl).then((response) async {
       if (response.statusCode == 200 && !completer.isCompleted) {
-        final workingIp = host.trim();
+        final workingIp = trimmedHost;
         await sl<CacheManager>().saveServerIpOverride(workingIp);
         sl<ApiClient>().updateBaseUrl(workingIp);
         sl<SocketClient>().reconnect();
@@ -114,7 +121,7 @@ void showNetworkSettingsDialog(BuildContext context) {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'The server runs on port 3000 and is accessible on any IP address. Auto-detect or enter your host IP below.',
+                      'Enter your local server IP (e.g. 192.168.1.100) or your Render cloud backend URL (e.g. https://qlix-backend.onrender.com).',
                       style: TextStyle(
                         fontSize: 13,
                         height: 1.4,
@@ -131,8 +138,8 @@ void showNetworkSettingsDialog(BuildContext context) {
                         fontWeight: FontWeight.w600,
                       ),
                       decoration: InputDecoration(
-                        labelText: 'Backend IP / Host',
-                        hintText: 'e.g. 192.168.1.100 or 10.0.2.2',
+                        labelText: 'Backend Host / Cloud URL',
+                        hintText: 'e.g. 192.168.1.100 or https://qlix-backend.onrender.com',
                         prefixIcon: const Icon(Icons.dns_rounded),
                         suffixIcon: isSearching
                             ? const Padding(

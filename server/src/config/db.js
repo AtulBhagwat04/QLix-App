@@ -275,13 +275,35 @@ async function executeSQL(pgSql, pgParams = [], clientState = null) {
 
 // Database module initialization
 async function initialize() {
+  if (!process.env.MONGODB_URI && process.env.NODE_ENV === 'production') {
+    console.warn('[CONFIG WARNING] MONGODB_URI is not set in production. Please set MONGODB_URI in your Render environment variables (e.g., from MongoDB Atlas).');
+  }
+
   console.log('MongoDB Bridge: Connecting to MongoDB...');
-  await mongoose.connect(mongoUri);
-  console.log('MongoDB Bridge: Connected successfully to MongoDB.');
+  try {
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 });
+    console.log('MongoDB Bridge: Connected successfully to MongoDB.');
+  } catch (err) {
+    console.error('Fatal: Failed to connect to MongoDB:', err.message);
+    if (!process.env.MONGODB_URI) {
+      console.error('Hint: Make sure to set the MONGODB_URI environment variable in your Render dashboard.');
+    }
+    throw err;
+  }
 
   console.log('MongoDB Bridge: Initializing SQLite schema...');
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const schemaPath = path.resolve(__dirname, '../../schema.sql');
+  let schemaPath = path.resolve(__dirname, '../../schema.sql');
+  if (!fs.existsSync(schemaPath)) {
+    // Check rootDir or cwd fallbacks
+    const cwdPath = path.resolve(process.cwd(), 'schema.sql');
+    const serverCwdPath = path.resolve(process.cwd(), 'server/schema.sql');
+    if (fs.existsSync(cwdPath)) {
+      schemaPath = cwdPath;
+    } else if (fs.existsSync(serverCwdPath)) {
+      schemaPath = serverCwdPath;
+    }
+  }
   const pgSql = fs.readFileSync(schemaPath, 'utf8');
   const sqliteSql = translatePgToSqlite(pgSql);
   await execSql(sqliteSql);
