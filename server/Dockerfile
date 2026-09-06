@@ -1,5 +1,5 @@
 # Production Build Stage
-FROM node:18-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
@@ -7,15 +7,19 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies including production locks
-RUN npm ci --only=production
+RUN npm ci --omit=dev
+
+# Copy database schema file required by sqlite/mongodb bridge
+COPY schema.sql ./
 
 # Copy application source code
 COPY src/ ./src/
 
-# Expose default HTTP Port
-EXPOSE 3000
+# Expose HTTP Port
+EXPOSE 3000 10000
 
 ENV NODE_ENV=production
 
 # Run node entrypoint server.js
 CMD ["node", "src/server.js"]
+

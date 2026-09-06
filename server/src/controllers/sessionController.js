@@ -94,9 +94,6 @@ export const joinSessionByCode = async (req, res, next) => {
     }
 
     const session = sessionRes.rows[0];
-    if (session.state === 'ended') {
-      return next(new AppError('This session has already ended', 400));
-    }
 
     // Check if participant already exists in this session
     let participant;
@@ -184,9 +181,22 @@ export const updateSession = async (req, res, next) => {
       ]
     );
 
+    const updatedSession = result.rows[0];
+
+    // Broadcast session state change in real-time to room participants
+    const io = req.app.get('io');
+    if (io) {
+      const roomName = `session:${id}`;
+      io.to(roomName).emit('session_state_changed', {
+        sessionId: id,
+        state: updatedSession.state,
+        session: updatedSession,
+      });
+    }
+
     res.status(200).json({
       status: 'success',
-      data: result.rows[0],
+      data: updatedSession,
     });
   } catch (error) {
     next(error);
@@ -225,9 +235,6 @@ export const verifySessionCode = async (req, res, next) => {
     }
 
     const session = result.rows[0];
-    if (session.state === 'ended') {
-      return next(new AppError('This session has already ended', 400));
-    }
 
     res.status(200).json({
       status: 'success',

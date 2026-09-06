@@ -12,11 +12,12 @@ export const activateQuizQuestion = async (req, res, next) => {
       return next(new AppError('Session not found', 404));
     }
 
-    // Set active question in database
+    // Set active question in database and ensure status is active
     await db.query(
       'UPDATE sessions SET active_quiz_question_id = $1 WHERE id = $2',
       [pollId, sessionId]
     );
+    await db.query("UPDATE polls SET status = 'active' WHERE id = $1", [pollId]);
 
     // Save activation timestamp and time limit in Redis
     const now = Date.now();

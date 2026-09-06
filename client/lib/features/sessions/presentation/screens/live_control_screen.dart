@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../../../core/network/socket_client.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../../quiz/domain/repositories/quiz_repository.dart';
@@ -42,6 +42,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
   StreamSubscription? _votesSubscription;
   StreamSubscription? _questionsSubscription;
   StreamSubscription? _questionsStatusSubscription;
+  StreamSubscription? _quizTimerSubscription;
+
+  // Quiz timer tracking
+  int _quizTimeRemaining = 0;
+  final Map<String, int> _quizDurations = {};
 
   @override
   void initState() {
@@ -61,12 +66,13 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     _votesSubscription?.cancel();
     _questionsSubscription?.cancel();
     _questionsStatusSubscription?.cancel();
+    _quizTimerSubscription?.cancel();
     super.dispose();
   }
 
   Future<void> _loadInitialData() async {
     try {
-      final session = await sl<SessionRepository>().getSessionDetails(
+      var session = await sl<SessionRepository>().getSessionDetails(
         widget.sessionId,
       );
       final polls = await sl<PollRepository>().getSessionPolls(
@@ -77,6 +83,18 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       );
 
       if (!mounted) return;
+
+      if (session['state'] == 'draft') {
+        try {
+          final updatedSession = await sl<SessionRepository>().updateSession(
+            widget.sessionId,
+            {'state': 'active'},
+          );
+          session = updatedSession;
+        } catch (_) {
+          // Ignore failure and continue with existing session data
+        }
+      }
 
       setState(() {
         _session = session;
@@ -135,11 +153,29 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
           }
         });
       });
+
+      _quizTimerSubscription = _socketClient.quizTimerStream.listen((data) {
+        final event = (data['event'] ?? '').toString();
+        final pollId = (data['pollId'] ?? '').toString();
+
+        if (!mounted) return;
+        setState(() {
+          if (event == 'start') {
+            _activeQuizQuestionId = pollId;
+            _quizTimeRemaining =
+                (data['durationSeconds'] as num?)?.toInt() ?? 15;
+          } else if (event == 'tick') {
+            _quizTimeRemaining = (data['remaining'] as num?)?.toInt() ?? 0;
+          } else if (event == 'end') {
+            _quizTimeRemaining = 0;
+          }
+        });
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error loading control panel: $e'),
+          content: Text(AppError.from(e, context: 'load')),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -166,9 +202,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
 
   void _endPoll(String pollId) async {
     try {
-      await sl<PollRepository>().updatePoll(pollId, {
-        'status': 'ended',
-      });
+      await sl<PollRepository>().updatePoll(pollId, {'status': 'ended'});
       if (!mounted) return;
       setState(() {
         for (var p in _polls) {
@@ -183,7 +217,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to end poll: $e')),
+        SnackBar(
+          content: Text(AppError.from(e, context: 'poll')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -206,7 +244,48 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to lock poll: $e'),
+          content: Text(AppError.from(e, context: 'poll')),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _changeSessionState(String newState) async {
+    if (_session == null) return;
+    try {
+      final updated = await sl<SessionRepository>().updateSession(
+        widget.sessionId,
+        {'state': newState},
+      );
+      _socketClient.updateSessionState(widget.sessionId, newState);
+      if (!mounted) return;
+      setState(() {
+        _session = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newState == 'active'
+                ? 'Session is now LIVE! Participants can interact.'
+                : newState == 'draft'
+                ? 'Session is in WAITING mode. Participants see waiting lobby.'
+                : 'Session has been ENDED.',
+          ),
+          backgroundColor: newState == 'active'
+              ? AppColors.success
+              : newState == 'draft'
+              ? Colors.amber[700]
+              : AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppError.from(e)),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -216,11 +295,152 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
 
   void _updateQuestionStatus(String questionId, String status) {
     if (_session == null) return;
-    _socketClient.updateQuestionStatus(
-      sessionId: _session!['id'] as String,
-      questionId: questionId,
-      status: status,
-    );
+    if (status == 'answered') {
+      _showAnswerDialog(questionId);
+    } else {
+      _socketClient.updateQuestionStatus(
+        sessionId: _session!['id'] as String,
+        questionId: questionId,
+        status: status,
+      );
+    }
+  }
+
+  void _showAnswerDialog(String questionId) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final answerCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.surfaceDark : Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.success.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.success,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Mark as Answered',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Optionally provide a written answer that participants will see.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: answerCtrl,
+                  maxLines: 3,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Type your answer here... (optional)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : Colors.grey[50],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          // Mark answered without a text reply
+                          _socketClient.updateQuestionStatus(
+                            sessionId: _session!['id'] as String,
+                            questionId: questionId,
+                            status: 'answered',
+                          );
+                        },
+                        child: const Text('Mark Answered'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 16),
+                        label: const Text(
+                          'Send',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _socketClient.updateQuestionStatus(
+                            sessionId: _session!['id'] as String,
+                            questionId: questionId,
+                            status: 'answered',
+                            answerText: answerCtrl.text.trim().isEmpty
+                                ? null
+                                : answerCtrl.text.trim(),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() => answerCtrl.dispose());
   }
 
   void _toggleQuestionPin(String questionId, bool currentPin) {
@@ -232,7 +452,172 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     );
   }
 
-  void _startQuizQuestion(String pollId, int timerLimit) {
+  int _getQuizDuration(Map<String, dynamic> quiz) {
+    final pollId = (quiz['id'] ?? '').toString();
+    if (_quizDurations.containsKey(pollId)) {
+      return _quizDurations[pollId]!;
+    }
+    final settings = quiz['settings'];
+    if (settings is Map && settings['timeLimit'] is num) {
+      return (settings['timeLimit'] as num).toInt();
+    }
+    return 15;
+  }
+
+  void _showSetTimerDialog(Map<String, dynamic> quiz) {
+    final pollId = (quiz['id'] ?? '').toString();
+    final quizTitle = (quiz['title'] ?? 'Quiz Question').toString();
+    int currentDuration = _getQuizDuration(quiz);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final options = [10, 15, 20, 30, 45, 60, 90, 120];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        int selected = currentDuration;
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.purpleAccent.withValues(
+                                alpha: 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(
+                              Icons.timer_rounded,
+                              color: AppColors.purpleAccent,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Set Quiz Timer',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? Colors.white
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Select countdown duration for "$quizTitle".',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: options.map((sec) {
+                      final isChosen = selected == sec;
+                      return ChoiceChip(
+                        label: Text('${sec}s'),
+                        selected: isChosen,
+                        selectedColor: AppColors.purpleAccent,
+                        labelStyle: TextStyle(
+                          color: isChosen
+                              ? Colors.white
+                              : (isDark ? Colors.white70 : Colors.black87),
+                          fontWeight: isChosen
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                        backgroundColor: isDark
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.black.withValues(alpha: 0.04),
+                        onSelected: (val) {
+                          if (val) {
+                            setDialogState(() {
+                              selected = sec;
+                            });
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _quizDurations[pollId] = selected;
+                        });
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Timer set to ${selected}s for this quiz question',
+                            ),
+                            backgroundColor: AppColors.purpleAccent,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.purpleAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text(
+                        'Apply Timer',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _startQuizQuestion(
+    String pollId,
+    int timerLimit, {
+    bool isRestart = false,
+  }) {
     if (_session == null) return;
     final messenger = ScaffoldMessenger.of(context);
     sl<QuizRepository>()
@@ -246,18 +631,35 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
           if (!mounted) return;
           setState(() {
             _activeQuizQuestionId = pollId;
+            _quizTimeRemaining = timerLimit;
           });
           messenger.showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.timer_rounded, color: Colors.white, size: 16),
-                  SizedBox(width: 8),
-                  Text('Quiz question activated, timer started!'),
+                  Icon(
+                    isRestart ? Icons.replay_rounded : Icons.timer_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isRestart
+                          ? 'Timer restarted for ${timerLimit}s! Previous participant responses are preserved.'
+                          : 'Quiz timer started for ${timerLimit}s!',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
                 ],
               ),
-              backgroundColor: AppColors.success,
+              backgroundColor: isRestart
+                  ? const Color(0xFF8B5CF6)
+                  : AppColors.success,
               behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           );
         })
@@ -265,12 +667,27 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
           if (!mounted) return;
           messenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to start quiz: $e'),
+              content: Text(AppError.from(e, context: 'quiz')),
               backgroundColor: AppColors.error,
               behavior: SnackBarBehavior.floating,
             ),
           );
         });
+  }
+
+  void _stopQuizQuestion(String pollId) {
+    if (_session == null) return;
+    _socketClient.stopQuizTimer(_session!['id'] as String, pollId);
+    if (!mounted) return;
+    setState(() {
+      _quizTimeRemaining = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Quiz timer stopped.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _broadcastAnnouncement() {
@@ -295,16 +712,54 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     _announcementMsgCtrl.clear();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Row(
           children: [
-            Icon(Icons.campaign_rounded, color: Colors.white, size: 16),
-            SizedBox(width: 8),
-            Text('Announcement broadcasted to all participants!'),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.campaign_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Alert Broadcast Sent!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Pushed to all active participants in real-time.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-        backgroundColor: AppColors.success,
+        backgroundColor: const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -313,273 +768,509 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
     final titleCtrl = TextEditingController();
     String type = 'multiple_choice';
     final optCtrls = [TextEditingController(), TextEditingController()];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+            final pollTypes = [
+              {
+                'value': 'multiple_choice',
+                'label': 'MCQ',
+                'icon': Icons.list_alt_rounded,
+                'color': AppColors.primary,
+              },
+              {
+                'value': 'word_cloud',
+                'label': 'Word Cloud',
+                'icon': Icons.cloud_rounded,
+                'color': const Color(0xFF06B6D4),
+              },
+              {
+                'value': 'rating',
+                'label': 'Rating',
+                'icon': Icons.star_rounded,
+                'color': const Color(0xFFF59E0B),
+              },
+              {
+                'value': 'open_text',
+                'label': 'Open Text',
+                'icon': Icons.notes_rounded,
+                'color': const Color(0xFF10B981),
+              },
+              {
+                'value': 'ranking',
+                'label': 'Ranking',
+                'icon': Icons.sort_rounded,
+                'color': AppColors.purpleAccent,
+              },
+            ];
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
               ),
-              title: const Row(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.poll_rounded, color: AppColors.primary, size: 22),
-                  SizedBox(width: 10),
-                  Text(
-                    'Create Live Poll',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  // Drag Handle
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Centered Header
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Center(
+                      child: Text(
+                        'Create Poll',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark
+                        ? Colors.white10
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+
+                  // Scrollable Body
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        20 + bottomInset,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Question Input
+                          Text(
+                            'QUESTION',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: titleCtrl,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              hintText: 'e.g. What should we discuss next?',
+                              hintStyle: TextStyle(
+                                color: isDark ? Colors.white30 : Colors.black26,
+                                fontWeight: FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                              filled: true,
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: AppColors.primary,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Poll Format (Small horizontal chips)
+                          Text(
+                            'FORMAT',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: pollTypes.map((pt) {
+                                final isSel = type == pt['value'];
+                                final color = pt['color'] as Color;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: InkWell(
+                                    onTap: () => setDialogState(
+                                      () => type = pt['value'] as String,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      curve: Curves.easeInOut,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 13,
+                                        vertical: 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: isSel
+                                            ? LinearGradient(
+                                                colors: [
+                                                  color,
+                                                  color.withValues(alpha: 0.85),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              )
+                                            : null,
+                                        color: isSel
+                                            ? null
+                                            : (isDark
+                                                  ? Colors.white.withValues(
+                                                      alpha: 0.05,
+                                                    )
+                                                  : Colors.black.withValues(
+                                                      alpha: 0.03,
+                                                    )),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: isSel
+                                              ? color.withValues(alpha: 0.9)
+                                              : (isDark
+                                                    ? Colors.white12
+                                                    : Colors.black.withValues(
+                                                        alpha: 0.08,
+                                                      )),
+                                          width: isSel ? 1.5 : 1.0,
+                                        ),
+                                        boxShadow: isSel
+                                            ? [
+                                                BoxShadow(
+                                                  color: color.withValues(
+                                                    alpha: 0.35,
+                                                  ),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            pt['icon'] as IconData,
+                                            size: 14,
+                                            color: isSel
+                                                ? Colors.white
+                                                : (isDark
+                                                      ? color.withValues(
+                                                          alpha: 0.9,
+                                                        )
+                                                      : color),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            pt['label'] as String,
+                                            style: TextStyle(
+                                              color: isSel
+                                                  ? Colors.white
+                                                  : (isDark
+                                                        ? Colors.white70
+                                                        : Colors.black87),
+                                              fontWeight: isSel
+                                                  ? FontWeight.w800
+                                                  : FontWeight.w600,
+                                              fontSize: 12,
+                                              letterSpacing: 0.1,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+
+                          if (type == 'multiple_choice' ||
+                              type == 'ranking') ...[
+                            const SizedBox(height: 18),
+
+                            // Options Header
+                            Text(
+                              'OPTIONS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: isDark ? Colors.white54 : Colors.black45,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Options List
+                            ...List.generate(optCtrls.length, (idx) {
+                              final letter = idx < letters.length
+                                  ? letters[idx]
+                                  : '${idx + 1}';
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.03)
+                                        : Colors.black.withValues(alpha: 0.02),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isDark
+                                          ? Colors.white10
+                                          : Colors.black12,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          letter,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: optCtrls[idx],
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          decoration: InputDecoration(
+                                            hintText: 'Option $letter',
+                                            hintStyle: TextStyle(
+                                              color: isDark
+                                                  ? Colors.white24
+                                                  : Colors.black26,
+                                              fontSize: 13,
+                                            ),
+                                            border: InputBorder.none,
+                                            isDense: true,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  vertical: 8,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (optCtrls.length > 2)
+                                        IconButton(
+                                          icon: Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                            size: 18,
+                                            color: isDark
+                                                ? Colors.white30
+                                                : Colors.black26,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () {
+                                            setDialogState(() {
+                                              optCtrls.removeAt(idx);
+                                            });
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+
+                            if (optCtrls.length < 8)
+                              TextButton.icon(
+                                onPressed: () {
+                                  setDialogState(() {
+                                    optCtrls.add(TextEditingController());
+                                  });
+                                },
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: const Text(
+                                  'Add Option',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                          ],
+
+                          const SizedBox(height: 16),
+
+                          // Submit button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: () async {
+                                final title = titleCtrl.text.trim();
+                                if (title.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please enter a question'),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                if (_session == null) return;
+
+                                List<Map<String, dynamic>>? optsList;
+                                if (type == 'multiple_choice' ||
+                                    type == 'ranking') {
+                                  optsList = optCtrls
+                                      .where((c) => c.text.trim().isNotEmpty)
+                                      .map((c) => {'optionText': c.text.trim()})
+                                      .toList();
+                                  if (optsList.length < 2) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Please provide at least 2 options',
+                                        ),
+                                        backgroundColor: AppColors.error,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                }
+
+                                final messenger = ScaffoldMessenger.of(context);
+                                final navigator = Navigator.of(dialogCtx);
+
+                                try {
+                                  await sl<PollRepository>().createPoll(
+                                    sessionId: _session!['id'] as String,
+                                    title: title,
+                                    type: type,
+                                    options: optsList,
+                                  );
+                                  navigator.pop();
+                                  await _loadInitialData();
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Poll created!'),
+                                      backgroundColor: AppColors.success,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                } catch (e) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        AppError.from(e, context: 'poll'),
+                                      ),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Create Poll',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: titleCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Poll Question Title',
-                        hintText: 'e.g. What topic should we cover next?',
-                        prefixIcon: const Icon(Icons.help_outline_rounded),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppSizes.radiusInput,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: type,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'multiple_choice',
-                          child: Row(
-                            children: [
-                              Icon(Icons.list_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Multiple Choice'),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'word_cloud',
-                          child: Row(
-                            children: [
-                              Icon(Icons.cloud_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Word Cloud'),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'rating',
-                          child: Row(
-                            children: [
-                              Icon(Icons.star_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Rating Poll (1-5 Stars)'),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'open_text',
-                          child: Row(
-                            children: [
-                              Icon(Icons.notes_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Open Text Response'),
-                            ],
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'ranking',
-                          child: Row(
-                            children: [
-                              Icon(Icons.sort_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('Ranking List'),
-                            ],
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        setDialogState(() {
-                          type = v ?? 'multiple_choice';
-                        });
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'Poll Format Type',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppSizes.radiusInput,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (type == 'multiple_choice' || type == 'ranking') ...[
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Options',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ...List.generate(optCtrls.length, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: optCtrls[index],
-                                  decoration: InputDecoration(
-                                    labelText: 'Option ${index + 1}',
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(
-                                        AppSizes.radiusInput,
-                                      ),
-                                    ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (optCtrls.length > 2)
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.remove_circle_outline_rounded,
-                                    color: AppColors.error,
-                                  ),
-                                  onPressed: () {
-                                    setDialogState(() {
-                                      optCtrls.removeAt(index);
-                                    });
-                                  },
-                                ),
-                            ],
-                          ),
-                        );
-                      }),
-                      OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppSizes.radiusButton,
-                            ),
-                          ),
-                        ),
-                        onPressed: () {
-                          setDialogState(() {
-                            optCtrls.add(TextEditingController());
-                          });
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 18),
-                        label: const Text('Add Option'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppSizes.radiusButton,
-                      ),
-                    ),
-                  ),
-                  onPressed: () async {
-                    final title = titleCtrl.text.trim();
-                    if (title.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please enter a question title'),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-                    if (_session == null) return;
-
-                    List<Map<String, dynamic>>? optsList;
-                    if (type == 'multiple_choice' || type == 'ranking') {
-                      optsList = optCtrls
-                          .where((c) => c.text.trim().isNotEmpty)
-                          .map((c) => {'optionText': c.text.trim()})
-                          .toList();
-                      if (optsList.length < 2) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Please provide at least 2 non-empty options',
-                            ),
-                            backgroundColor: AppColors.error,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        return;
-                      }
-                    }
-
-                    final messenger = ScaffoldMessenger.of(context);
-                    final navigator = Navigator.of(dialogCtx);
-
-                    try {
-                      await sl<PollRepository>().createPoll(
-                        sessionId: _session!['id'] as String,
-                        title: title,
-                        type: type,
-                        options: optsList,
-                      );
-                      navigator.pop();
-                      await _loadInitialData();
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                              SizedBox(width: 8),
-                              Text('Live poll created successfully!'),
-                            ],
-                          ),
-                          backgroundColor: AppColors.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } catch (e) {
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to create poll: $e'),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Create Poll'),
-                ),
-              ],
             );
           },
         );
@@ -596,233 +1287,512 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       TextEditingController(),
     ];
     int correctIndex = 0;
+    int selectedDuration = 15;
+    const durations = [10, 15, 30, 45, 60];
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (dialogCtx) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusCard),
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.88,
               ),
-              title: const Row(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.emoji_events_rounded,
-                    color: AppColors.purpleAccent,
-                    size: 22,
+                  // Drag Handle
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : Colors.black12,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
-                  SizedBox(width: 10),
-                  Text(
-                    'Add Quiz Question',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  const SizedBox(height: 12),
+
+                  // Minimal Centered Header
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Center(
+                      child: Text(
+                        'Add Quiz Question',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark
+                        ? Colors.white10
+                        : Colors.black.withValues(alpha: 0.06),
+                  ),
+
+                  // Scrollable Body
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        20 + bottomInset,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Question Input
+                          Text(
+                            'QUESTION',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: titleCtrl,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              hintText: 'e.g. What is the output of 2 + 2?',
+                              hintStyle: TextStyle(
+                                color: isDark ? Colors.white30 : Colors.black26,
+                                fontWeight: FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                              filled: true,
+                              fillColor: isDark
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : Colors.black.withValues(alpha: 0.03),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? Colors.white12
+                                      : Colors.black12,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: AppColors.purpleAccent,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Timer Duration Selector
+                          Row(
+                            children: [
+                              Text(
+                                'TIMER DURATION',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${selectedDuration}s limit',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.purpleAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: durations.map((d) {
+                                final isSel = selectedDuration == d;
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: ChoiceChip(
+                                    label: Text('${d}s'),
+                                    selected: isSel,
+                                    onSelected: (_) => setDialogState(
+                                      () => selectedDuration = d,
+                                    ),
+                                    selectedColor: AppColors.purpleAccent,
+                                    labelStyle: TextStyle(
+                                      color: isSel
+                                          ? Colors.white
+                                          : (isDark
+                                                ? Colors.white70
+                                                : Colors.black87),
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                    backgroundColor: isDark
+                                        ? Colors.white.withValues(alpha: 0.05)
+                                        : Colors.black.withValues(alpha: 0.04),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    side: BorderSide(
+                                      color: isSel
+                                          ? AppColors.purpleAccent
+                                          : (isDark
+                                                ? Colors.white10
+                                                : Colors.black12),
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Options Header
+                          Row(
+                            children: [
+                              Text(
+                                'OPTIONS',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.black45,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '• Tap letter to mark correct',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.white38
+                                      : Colors.black38,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          // Options List
+                          ...List.generate(optCtrls.length, (idx) {
+                            final isCorrect = correctIndex == idx;
+                            final letter = idx < letters.length
+                                ? letters[idx]
+                                : '${idx + 1}';
+
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isCorrect
+                                      ? AppColors.success.withValues(
+                                          alpha: isDark ? 0.12 : 0.06,
+                                        )
+                                      : (isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.03,
+                                              )
+                                            : Colors.black.withValues(
+                                                alpha: 0.02,
+                                              )),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: isCorrect
+                                        ? AppColors.success
+                                        : (isDark
+                                              ? Colors.white10
+                                              : Colors.black12),
+                                    width: isCorrect ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Correct toggle badge
+                                    GestureDetector(
+                                      onTap: () => setDialogState(
+                                        () => correctIndex = idx,
+                                      ),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: isCorrect
+                                              ? AppColors.success
+                                              : (isDark
+                                                    ? Colors.white12
+                                                    : Colors.black.withValues(
+                                                        alpha: 0.06,
+                                                      )),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: isCorrect
+                                            ? const Icon(
+                                                Icons.check_rounded,
+                                                size: 16,
+                                                color: Colors.white,
+                                              )
+                                            : Text(
+                                                letter,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isDark
+                                                      ? Colors.white70
+                                                      : Colors.black87,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: optCtrls[idx],
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'Option $letter',
+                                          hintStyle: TextStyle(
+                                            color: isDark
+                                                ? Colors.white24
+                                                : Colors.black26,
+                                            fontSize: 13,
+                                          ),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                vertical: 8,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                    if (optCtrls.length > 2)
+                                      IconButton(
+                                        icon: Icon(
+                                          Icons.remove_circle_outline_rounded,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.white30
+                                              : Colors.black26,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            optCtrls.removeAt(idx);
+                                            if (correctIndex >=
+                                                optCtrls.length) {
+                                              correctIndex = 0;
+                                            }
+                                          });
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+
+                          if (optCtrls.length < 6)
+                            TextButton.icon(
+                              onPressed: () {
+                                setDialogState(() {
+                                  optCtrls.add(TextEditingController());
+                                });
+                              },
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text(
+                                'Add Option',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // Submit button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 46,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.purpleAccent,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: () async {
+                                final title = titleCtrl.text.trim();
+                                if (title.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please enter a question'),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                if (_session == null) return;
+
+                                final filledOptions = optCtrls
+                                    .asMap()
+                                    .entries
+                                    .where(
+                                      (e) => e.value.text.trim().isNotEmpty,
+                                    )
+                                    .toList();
+
+                                if (filledOptions.length < 2) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Please provide at least 2 options',
+                                      ),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                if (optCtrls[correctIndex].text
+                                    .trim()
+                                    .isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'The correct answer option cannot be empty',
+                                      ),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                  return;
+                                }
+
+                                final options = filledOptions.map((e) {
+                                  return {
+                                    'optionText': e.value.text.trim(),
+                                    'isCorrect': e.key == correctIndex,
+                                  };
+                                }).toList();
+
+                                final messenger = ScaffoldMessenger.of(context);
+                                final navigator = Navigator.of(dialogCtx);
+
+                                try {
+                                  final newPoll = await sl<PollRepository>()
+                                      .createPoll(
+                                        sessionId: _session!['id'] as String,
+                                        title: title,
+                                        type: 'multiple_choice',
+                                        settings: {
+                                          'isQuiz': true,
+                                          'timerLimit': selectedDuration,
+                                        },
+                                        options: options,
+                                      );
+                                  if (newPoll['id'] != null) {
+                                    _quizDurations[newPoll['id'].toString()] =
+                                        selectedDuration;
+                                  }
+                                  navigator.pop();
+                                  await _loadInitialData();
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Quiz question created!'),
+                                      backgroundColor: AppColors.success,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                } catch (e) {
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        AppError.from(e, context: 'quiz'),
+                                      ),
+                                      backgroundColor: AppColors.error,
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                              child: const Text(
+                                'Create Quiz',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: titleCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Quiz Question Text',
-                        hintText:
-                            'e.g. Which keyword defines an immutable variable in Dart?',
-                        prefixIcon: const Icon(Icons.help_outline_rounded),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppSizes.radiusInput,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Select the correct answer option:',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ...List.generate(optCtrls.length, (idx) {
-                      final isSelected = correctIndex == idx;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          children: [
-                            InkWell(
-                              onTap: () {
-                                setDialogState(() {
-                                  correctIndex = idx;
-                                });
-                              },
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isSelected
-                                      ? AppColors.success
-                                      : Colors.transparent,
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppColors.success
-                                        : Colors.grey,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: isSelected
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 14,
-                                        color: Colors.white,
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: optCtrls[idx],
-                                decoration: InputDecoration(
-                                  labelText: 'Option ${idx + 1}',
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(
-                                      AppSizes.radiusInput,
-                                    ),
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogCtx),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.purpleAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        AppSizes.radiusButton,
-                      ),
-                    ),
-                  ),
-                  onPressed: () async {
-                    final title = titleCtrl.text.trim();
-                    if (title.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Please enter a question text'),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-                    if (_session == null) return;
-
-                    final filledOptions = optCtrls
-                        .asMap()
-                        .entries
-                        .where((e) => e.value.text.trim().isNotEmpty)
-                        .toList();
-
-                    if (filledOptions.length < 2) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Please provide at least 2 non-empty options',
-                          ),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-
-                    final isCorrectOptionFilled = optCtrls[correctIndex].text
-                        .trim()
-                        .isNotEmpty;
-                    if (!isCorrectOptionFilled) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('The correct option cannot be empty'),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      return;
-                    }
-
-                    final options = filledOptions.map((e) {
-                      return {
-                        'optionText': e.value.text.trim(),
-                        'isCorrect': e.key == correctIndex,
-                      };
-                    }).toList();
-
-                    final messenger = ScaffoldMessenger.of(context);
-                    final navigator = Navigator.of(dialogCtx);
-
-                    try {
-                      await sl<PollRepository>().createPoll(
-                        sessionId: _session!['id'] as String,
-                        title: title,
-                        type: 'multiple_choice',
-                        settings: {'isQuiz': true},
-                        options: options,
-                      );
-                      navigator.pop();
-                      await _loadInitialData();
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Row(
-                            children: [
-                              Icon(
-                                Icons.check_circle_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                              SizedBox(width: 8),
-                              Text('Quiz question created successfully!'),
-                            ],
-                          ),
-                          backgroundColor: AppColors.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } catch (e) {
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to create quiz: $e'),
-                          backgroundColor: AppColors.error,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Create Question'),
-                ),
-              ],
             );
           },
         );
@@ -856,7 +1826,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                   ],
                 ),
                 child: QrImageView(
-                  data: 'http://${ApiClient.defaultHost}:3000/session/$code',
+                  data: '${SocketClient.serverUrl}/session/$code',
                   version: QrVersions.auto,
                   size: 200,
                   gapless: false,
@@ -1105,6 +2075,109 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
             tooltip: 'Show Session QR Code',
             onPressed: () => _showQrDialog(context, code),
           ),
+          PopupMenuButton<String>(
+            icon: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color:
+                    (_session?['state'] == 'draft'
+                            ? Colors.amber
+                            : _session?['state'] == 'ended'
+                            ? Colors.grey
+                            : AppColors.success)
+                        .withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color:
+                      (_session?['state'] == 'draft'
+                              ? Colors.amber
+                              : _session?['state'] == 'ended'
+                              ? Colors.grey
+                              : AppColors.success)
+                          .withValues(alpha: 0.4),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _session?['state'] == 'draft'
+                          ? Colors.amber
+                          : _session?['state'] == 'ended'
+                          ? Colors.grey
+                          : AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    (_session?['state'] ?? 'active').toString().toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: _session?['state'] == 'draft'
+                          ? Colors.amber
+                          : _session?['state'] == 'ended'
+                          ? Colors.grey
+                          : AppColors.success,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.arrow_drop_down_rounded, size: 14),
+                ],
+              ),
+            ),
+            tooltip: 'Change Session Status',
+            onSelected: _changeSessionState,
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'active',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.play_circle_fill_rounded,
+                      color: AppColors.success,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text('Set Active (Live)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'draft',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.hourglass_top_rounded,
+                      color: Colors.amber,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text('Set Waiting (Draft)'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'ended',
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.stop_circle_rounded,
+                      color: AppColors.error,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text('End Session'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 4),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -1158,15 +2231,18 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
           _buildAnnouncementsTab(),
         ],
       ),
-      // FAB placed at Bottom Right corner as explicitly requested
+      // FAB placed at Bottom Right corner as explicitly requested (hidden on Alerts tab)
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: _buildDynamicFab(),
+      floatingActionButton: _tabController.index == 3
+          ? null
+          : _buildDynamicFab(),
     );
   }
 
   // Dynamic FAB at bottom-right corner adapting to active tab context
-  Widget _buildDynamicFab() {
+  Widget? _buildDynamicFab() {
     final tabIdx = _tabController.index;
+    if (tabIdx == 3) return null;
 
     IconData fabIcon;
     String fabLabel;
@@ -1192,17 +2268,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
         fabAction = _addNewQuizDialog;
         fabColor = AppColors.purpleAccent;
         break;
-      case 3:
-        fabIcon = Icons.send_rounded;
-        fabLabel = 'Broadcast';
-        fabAction = _broadcastAnnouncement;
-        fabColor = AppColors.primary;
-        break;
       default:
-        fabIcon = Icons.add_rounded;
-        fabLabel = 'New';
-        fabAction = _addNewPollDialog;
-        fabColor = AppColors.primary;
+        return null;
     }
 
     return Container(
@@ -1507,7 +2574,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'End Poll',
+                                      'End',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -1535,7 +2602,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'Reopen Poll',
+                                      'Reopen',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -1563,7 +2630,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                                       size: 16,
                                     ),
                                     label: const Text(
-                                      'Activate Poll',
+                                      'Activate',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 12,
@@ -1982,91 +3049,316 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
                   itemCount: quizPolls.length,
                   itemBuilder: (context, index) {
                     final quiz = quizPolls[index];
-                    final pollId = quiz['id'] as String;
+                    final pollId = (quiz['id'] ?? '').toString();
                     final isCurrent = _activeQuizQuestionId == pollId;
+                    final isTicking = isCurrent && _quizTimeRemaining > 0;
+                    final duration = _getQuizDuration(quiz);
+                    final totalVotes =
+                        (quiz['results']?['totalVotes'] as num?)?.toInt() ?? 0;
+                    final options = (quiz['options'] as List?) ?? [];
 
                     return Card(
                       color: isCurrent
-                          ? AppColors.purpleAccent.withValues(alpha: 0.04)
-                          : null,
-                      margin: const EdgeInsets.only(bottom: 12),
+                          ? AppColors.purpleAccent.withValues(alpha: 0.05)
+                          : (isDark
+                                ? Colors.white.withValues(alpha: 0.03)
+                                : Colors.white),
+                      margin: const EdgeInsets.only(bottom: 14),
                       shape: RoundedRectangleBorder(
                         side: BorderSide(
-                          color: isCurrent
-                              ? AppColors.purpleAccent.withValues(alpha: 0.4)
-                              : (isDark ? Colors.white10 : Colors.black12),
-                          width: isCurrent ? 1.5 : 1.0,
+                          color: isTicking
+                              ? AppColors.purpleAccent
+                              : (isCurrent
+                                    ? AppColors.purpleAccent.withValues(
+                                        alpha: 0.4,
+                                      )
+                                    : (isDark
+                                          ? Colors.white10
+                                          : Colors.black12)),
+                          width: isTicking ? 2.0 : 1.0,
                         ),
                         borderRadius: BorderRadius.circular(
                           AppSizes.radiusCard,
                         ),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(16),
-                        title: Text(
-                          quiz['title'] as String,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isCurrent
-                                      ? AppColors.purpleAccent.withValues(
-                                          alpha: 0.12,
-                                        )
-                                      : Colors.grey.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(
-                                    AppSizes.radiusBadge,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Header Row: Title and responses badge
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.purpleAccent.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.emoji_events_rounded,
+                                    color: AppColors.purpleAccent,
+                                    size: 18,
                                   ),
                                 ),
-                                child: Text(
-                                  isCurrent
-                                      ? 'ACTIVE TIMER TICKING'
-                                      : 'READY TO LAUNCH',
-                                  style: TextStyle(
-                                    color: isCurrent
-                                        ? AppColors.purpleAccent
-                                        : Colors.grey,
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        quiz['title'] as String? ??
+                                            'Quiz Question',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${options.length} choices • 1000 base pts',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.black54,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        trailing: ElevatedButton.icon(
-                          onPressed: isCurrent
-                              ? null
-                              : () => _startQuizQuestion(pollId, 15),
-                          icon: const Icon(Icons.timer_outlined, size: 14),
-                          label: const Text('Start (15s)'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isCurrent
-                                ? Colors.transparent
-                                : AppColors.purpleAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 10,
+                                if (totalVotes > 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.success.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: AppColors.success.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.check_circle_outline_rounded,
+                                          color: AppColors.success,
+                                          size: 13,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '$totalVotes answered',
+                                          style: const TextStyle(
+                                            color: AppColors.success,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppSizes.radiusButton,
-                              ),
+
+                            const SizedBox(height: 14),
+                            Divider(
+                              height: 1,
+                              color: isDark ? Colors.white10 : Colors.black12,
                             ),
-                          ),
+                            const SizedBox(height: 14),
+
+                            // Controls Row: Timer selector chip & Action buttons
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // Timer Duration selector chip
+                                InkWell(
+                                  onTap: () => _showSetTimerDialog(quiz),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.06)
+                                          : Colors.black.withValues(
+                                              alpha: 0.05,
+                                            ),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white12
+                                            : Colors.black12,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.timer_outlined,
+                                          size: 14,
+                                          color: AppColors.purpleAccent,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          '${duration}s',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12,
+                                            color: AppColors.purpleAccent,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          Icons.arrow_drop_down_rounded,
+                                          size: 18,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.black54,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                                // Status Badge & Actions
+                                Row(
+                                  children: [
+                                    if (isTicking) ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 6,
+                                        ),
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.purpleAccent
+                                              .withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const SizedBox(
+                                              width: 10,
+                                              height: 10,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: AppColors.purpleAccent,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '${_quizTimeRemaining}s left',
+                                              style: const TextStyle(
+                                                color: AppColors.purpleAccent,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Restart Timer Button
+                                      ElevatedButton.icon(
+                                        onPressed: () => _startQuizQuestion(
+                                          pollId,
+                                          duration,
+                                          isRestart: true,
+                                        ),
+                                        icon: const Icon(
+                                          Icons.replay_rounded,
+                                          size: 14,
+                                        ),
+                                        label: const Text('Restart'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              AppColors.purpleAccent,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      // Stop timer button
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.stop_circle_outlined,
+                                          color: AppColors.error,
+                                        ),
+                                        tooltip: 'Stop Timer',
+                                        onPressed: () =>
+                                            _stopQuizQuestion(pollId),
+                                      ),
+                                    ] else ...[
+                                      // If already has responses, show Restart Timer, else Start Timer
+                                      ElevatedButton.icon(
+                                        onPressed: () => _startQuizQuestion(
+                                          pollId,
+                                          duration,
+                                          isRestart: totalVotes > 0,
+                                        ),
+                                        icon: Icon(
+                                          totalVotes > 0
+                                              ? Icons.replay_rounded
+                                              : Icons.play_arrow_rounded,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          totalVotes > 0
+                                              ? 'Restart (${duration}s)'
+                                              : 'Start (${duration}s)',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: totalVotes > 0
+                                              ? const Color(0xFF7C3AED)
+                                              : AppColors.purpleAccent,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 10,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -2078,154 +3370,296 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
   }
 
   Widget _buildAnnouncementsTab() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final presets = [
+      {
+        'icon': Icons.rocket_launch_rounded,
+        'title': 'Start Soon',
+        'subtitle': 'Seats & attention',
+        'alertTitle': 'Session Starting Soon',
+        'alertMsg':
+            'Please take your seats! We are starting the presentation shortly.',
+      },
+      {
+        'icon': Icons.bar_chart_rounded,
+        'title': 'Poll Opened',
+        'subtitle': 'Cast your vote',
+        'alertTitle': 'Live Poll Now Open',
+        'alertMsg':
+            'A new live poll is active! Open your app to cast your vote.',
+      },
+      {
+        'icon': Icons.question_answer_rounded,
+        'title': 'Q&A Time',
+        'subtitle': 'Submit questions',
+        'alertTitle': 'Q&A Session Open',
+        'alertMsg':
+            'Submit your questions and upvote your favorites in the Q&A tab.',
+      },
+      {
+        'icon': Icons.coffee_rounded,
+        'title': '5 Min Break',
+        'subtitle': 'Short break',
+        'alertTitle': 'Short 5-Minute Break',
+        'alertMsg': 'We are taking a short 5-minute break. Stay tuned!',
+      },
+    ];
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 80),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.campaign_rounded,
-                  color: AppColors.primary,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Broadcast Alerts',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Push real-time popup messages to all participants instantly.',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Quick Presets:',
+          // Quick Presets label
+          Text(
+            'QUICK PRESETS',
             style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white38 : Colors.black38,
+              letterSpacing: 1.0,
             ),
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ActionChip(
-                avatar: const Icon(Icons.play_circle_outline, size: 16),
-                label: const Text('Starting Soon'),
-                onPressed: () {
-                  _announcementTitleCtrl.text = 'Session Starting Soon';
-                  _announcementMsgCtrl.text =
-                      'Please take your seats! We are starting the presentation shortly.';
+          const SizedBox(height: 12),
+
+          // Preset tiles responsive grid
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 220,
+              mainAxisExtent: 72,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: presets.length,
+            itemBuilder: (context, index) {
+              final preset = presets[index];
+              return GestureDetector(
+                onTap: () {
+                  _announcementTitleCtrl.text = preset['alertTitle'] as String;
+                  _announcementMsgCtrl.text = preset['alertMsg'] as String;
+                  setState(() {});
                 },
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.poll, size: 16),
-                label: const Text('Poll Opened'),
-                onPressed: () {
-                  _announcementTitleCtrl.text = 'Live Poll Now Open';
-                  _announcementMsgCtrl.text =
-                      'A new live poll is active! Open your app to cast your vote.';
-                },
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.question_answer, size: 16),
-                label: const Text('Q&A Time'),
-                onPressed: () {
-                  _announcementTitleCtrl.text = 'Q&A Session Open';
-                  _announcementMsgCtrl.text =
-                      'Submit your questions and upvote your favorites in the Q&A tab.';
-                },
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.timer, size: 16),
-                label: const Text('5 Min Break'),
-                onPressed: () {
-                  _announcementTitleCtrl.text = 'Short 5-Minute Break';
-                  _announcementMsgCtrl.text =
-                      'We are taking a short 5-minute break. Stay tuned!';
-                },
-              ),
-            ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.black.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white10
+                          : Colors.black.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        preset['icon'] as IconData,
+                        color: AppColors.primary,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              preset['title'] as String,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.87)
+                                    : Colors.black87,
+                              ),
+                            ),
+                            Text(
+                              preset['subtitle'] as String,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? Colors.white38 : Colors.black38,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 28),
+
+          // Alert Title input
+          Text(
+            'ALERT TITLE',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white38 : Colors.black38,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _announcementTitleCtrl,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              labelText: 'Alert Title',
               hintText: 'e.g. Session starting in 2 minutes',
-              prefixIcon: const Icon(Icons.title_rounded),
+              hintStyle: TextStyle(
+                color: isDark ? Colors.white30 : Colors.black26,
+                fontWeight: FontWeight.normal,
+              ),
+              prefixIcon: Container(
+                margin: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.title_rounded,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
+              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusInput),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 2,
+                ),
+              ),
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.02),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
               ),
             ),
           ),
-          const SizedBox(height: 16),
+
+          const SizedBox(height: 20),
+
+          // Alert message body
+          Text(
+            'MESSAGE BODY',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white38 : Colors.black38,
+              letterSpacing: 1.0,
+            ),
+          ),
+          const SizedBox(height: 10),
           TextField(
             controller: _announcementMsgCtrl,
             maxLines: 4,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              labelText: 'Alert Message Body',
-              hintText: 'Type your message to broadcast...',
+              hintText: 'Type your message to broadcast to all attendees\u2026',
+              hintStyle: TextStyle(
+                color: isDark ? Colors.white30 : Colors.black26,
+                fontWeight: FontWeight.normal,
+              ),
               alignLabelWithHint: true,
-              prefixIcon: const Padding(
-                padding: EdgeInsets.only(bottom: 60),
-                child: Icon(Icons.message_rounded),
-              ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusInput),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
               ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide(
+                  color: isDark ? Colors.white12 : Colors.black12,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                  color: AppColors.primary,
+                  width: 2,
+                ),
+              ),
+              filled: true,
+              fillColor: isDark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.02),
+              contentPadding: const EdgeInsets.all(16),
             ),
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 28),
+
+          // Broadcast button
           Container(
+            height: 54,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppSizes.radiusButton),
-              gradient: const LinearGradient(colors: AppColors.primaryGradient),
+              gradient: const LinearGradient(
+                colors: AppColors.primaryGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
-            child: ElevatedButton.icon(
+            child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
               onPressed: _broadcastAnnouncement,
-              icon: const Icon(Icons.send_rounded, size: 18),
-              label: const Text(
-                'Broadcast Alert Now',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              child: const Center(
+                child: Text(
+                  'Broadcast Announcement',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ),
             ),
           ),

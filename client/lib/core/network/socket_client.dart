@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:get_it/get_it.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../storage/cache_manager.dart';
@@ -9,7 +9,42 @@ class SocketClient {
 
   static String get defaultHost {
     if (kIsWeb) return 'localhost';
-    return '10.109.186.64';
+    return '10.225.134.64';
+  }
+
+  static String formatServerUrl(String input) {
+    var raw = input.trim();
+    if (raw.isEmpty) return 'http://$defaultHost:3000';
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        raw = raw.substring(0, raw.length - 4);
+      }
+      return raw;
+    }
+
+    final isDomain = raw.contains('.onrender.com') ||
+        (raw.contains('.') &&
+            !RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}').hasMatch(raw) &&
+            !raw.contains(':'));
+
+    if (isDomain) {
+      while (raw.endsWith('/')) {
+        raw = raw.substring(0, raw.length - 1);
+      }
+      if (raw.endsWith('/api')) {
+        raw = raw.substring(0, raw.length - 4);
+      }
+      return 'https://$raw';
+    }
+
+    if (raw.contains(':')) {
+      return 'http://$raw';
+    }
+    return 'http://$raw:3000';
   }
 
   static String get serverUrl {
@@ -18,11 +53,12 @@ class SocketClient {
       if (ip != null &&
           ip.trim().isNotEmpty &&
           ip.trim() != '10.202.235.64' &&
-          ip.trim() != '10.128.231.64') {
-        return 'http://${ip.trim()}:3000';
+          ip.trim() != '10.128.231.64' &&
+          ip.trim() != '10.109.186.64') {
+        return formatServerUrl(ip);
       }
     } catch (_) {}
-    return 'http://$defaultHost:3000';
+    return formatServerUrl(defaultHost);
   }
 
   void disconnect() {
@@ -54,6 +90,8 @@ class SocketClient {
       StreamController<Map<String, dynamic>>.broadcast();
   final _announcementController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _sessionStateController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<bool> get connectionStream => _connectionController.stream;
   Stream<Map<String, dynamic>?> get pollActivationStream =>
@@ -71,6 +109,8 @@ class SocketClient {
       _quizTimerController.stream;
   Stream<Map<String, dynamic>> get announcementStream =>
       _announcementController.stream;
+  Stream<Map<String, dynamic>> get sessionStateStream =>
+      _sessionStateController.stream;
 
   bool get isConnected => _socket?.connected ?? false;
 
@@ -84,7 +124,7 @@ class SocketClient {
     _socket = io.io(
       serverUrl,
       io.OptionBuilder()
-          .setTransports(['websocket'])
+          .setTransports(['websocket', 'polling'])
           .disableAutoConnect()
           .enableReconnection()
           .setReconnectionDelay(2000)
@@ -92,7 +132,7 @@ class SocketClient {
     );
 
     _socket!.onConnect((_) {
-      print('Socket connected to backend');
+      debugPrint('Socket connected to backend');
       _connectionController.add(true);
       if (_lastAccessCode != null) {
         _socket?.emit('join_session', {
@@ -104,7 +144,7 @@ class SocketClient {
     });
 
     _socket!.onDisconnect((_) {
-      print('Socket disconnected from backend');
+      debugPrint('Socket disconnected from backend');
       _connectionController.add(false);
     });
 
@@ -126,7 +166,7 @@ class SocketClient {
       _questionCreatedController.add(Map<String, dynamic>.from(data as Map));
     });
 
-    _socket!.on('question_status_updated', (data) {
+    _socket!.on('question_status_changed', (data) {
       _questionStatusController.add(Map<String, dynamic>.from(data as Map));
     });
 
@@ -163,6 +203,12 @@ class SocketClient {
       _announcementController.add(Map<String, dynamic>.from(data as Map));
     });
 
+    _socket!.on('session_state_changed', (data) {
+      if (data != null) {
+        _sessionStateController.add(Map<String, dynamic>.from(data as Map));
+      }
+    });
+
     _socket!.connect();
   }
 
@@ -193,10 +239,10 @@ class SocketClient {
     _socket?.emit('submit_vote', {
       'pollId': pollId,
       'participantId': participantId,
-      'optionIds': optionIds ?? [],
+      'optionIds': optionIds,
       'textResponse': textResponse,
       'ratingValue': ratingValue,
-      'rankingIds': rankingIds ?? [],
+      'rankingIds': rankingIds,
     });
   }
 
@@ -204,7 +250,7 @@ class SocketClient {
     required String sessionId,
     required String participantId,
     required String text,
-    required bool isAnonymous,
+    bool isAnonymous = false,
   }) {
     _socket?.emit('submit_question', {
       'sessionId': sessionId,
@@ -215,7 +261,7 @@ class SocketClient {
   }
 
   void upvoteQuestion({
-    required String sessionId,
+    String? sessionId,
     required String questionId,
     required String participantId,
   }) {
@@ -231,12 +277,14 @@ class SocketClient {
     required String questionId,
     String? status,
     bool? isPinned,
+    String? answerText,
   }) {
     _socket?.emit('update_question_status', {
       'sessionId': sessionId,
       'questionId': questionId,
       'status': status,
       'isPinned': isPinned,
+      'answerText': answerText,
     });
   }
 
@@ -256,11 +304,25 @@ class SocketClient {
     });
   }
 
+  void stopQuizTimer(String sessionId, String pollId) {
+    _socket?.emit('stop_quiz_timer', {
+      'sessionId': sessionId,
+      'pollId': pollId,
+    });
+  }
+
   void sendAnnouncement(String sessionId, String title, String message) {
     _socket?.emit('send_announcement', {
       'sessionId': sessionId,
       'title': title,
       'message': message,
+    });
+  }
+
+  void updateSessionState(String sessionId, String state) {
+    _socket?.emit('update_session_state', {
+      'sessionId': sessionId,
+      'state': state,
     });
   }
 
@@ -275,5 +337,6 @@ class SocketClient {
     _reactionController.close();
     _quizTimerController.close();
     _announcementController.close();
+    _sessionStateController.close();
   }
 }

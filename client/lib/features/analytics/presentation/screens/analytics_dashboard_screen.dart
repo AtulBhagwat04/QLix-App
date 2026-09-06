@@ -14,6 +14,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/error_handler.dart';
 
 import '../../../sessions/domain/repositories/session_repository.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
@@ -68,36 +69,84 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   }
 
   Future<void> _loadAnalytics() async {
+    setState(() => _isLoading = true);
     try {
-      final session = await sl<SessionRepository>().getSessionDetails(
-        widget.sessionId,
-      );
-      final response = await _apiClient.dio.get(
-        '/analytics/session/${widget.sessionId}',
-      );
-      final questions = await sl<QaRepository>().getSessionQuestions(
-        widget.sessionId,
-      );
-      final polls = await sl<PollRepository>().getSessionPolls(
-        widget.sessionId,
-      );
+      // 1. Load Session Details
+      Map<String, dynamic>? session;
+      try {
+        session = await sl<SessionRepository>().getSessionDetails(
+          widget.sessionId,
+        );
+      } catch (_) {}
 
-      if (response.statusCode == 200 && response.data != null) {
-        setState(() {
-          _session = session;
-          _analyticsData = response.data['data'] as Map<String, dynamic>;
-          _questions = questions;
-          _polls = polls;
-          _titleController.text = session['title'] as String? ?? '';
-          _descController.text = session['description'] as String? ?? '';
-          _isLoading = false;
-        });
-      }
+      // 2. Load Session Analytics from server
+      Map<String, dynamic>? analyticsData;
+      try {
+        final response = await _apiClient.dio.get(
+          '/analytics/session/${widget.sessionId}',
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          analyticsData = response.data['data'] as Map<String, dynamic>?;
+        }
+      } catch (_) {}
+
+      // 3. Load Q&A Questions
+      List<Map<String, dynamic>> questions = [];
+      try {
+        questions = await sl<QaRepository>().getSessionQuestions(
+          widget.sessionId,
+        );
+      } catch (_) {}
+
+      // 4. Load Polls
+      List<Map<String, dynamic>> polls = [];
+      try {
+        polls = await sl<PollRepository>().getSessionPolls(
+          widget.sessionId,
+        );
+      } catch (_) {}
+
+      // Fallback analytics data if server response wasn't available
+      analyticsData ??= {
+        'sessionId': widget.sessionId,
+        'metrics': {
+          'totalParticipants': int.tryParse(session?['participant_count']?.toString() ?? '0') ?? 0,
+          'totalVotes': polls.fold<int>(
+            0,
+            (sum, p) =>
+                sum + (int.tryParse(p['votes_count']?.toString() ?? '0') ?? 0),
+          ),
+          'totalQuestions': questions.length,
+          'averageEngagement': 0.0,
+        },
+        'pollStats': polls.map((p) => {
+          'id': p['id'],
+          'title': p['title'] ?? 'Poll',
+          'type': p['type'] ?? 'multiple_choice',
+          'status': p['status'] ?? 'draft',
+          'votesCount': int.tryParse(p['votes_count']?.toString() ?? '0') ?? 0,
+        }).toList(),
+        'activityTimeline': [],
+        'recentResponses': [],
+        'participantsList': [],
+      };
+
+      if (!mounted) return;
+      setState(() {
+        _session = session ?? {'id': widget.sessionId, 'title': 'Session Analytics', 'state': 'ended'};
+        _analyticsData = analyticsData;
+        _questions = questions;
+        _polls = polls;
+        _titleController.text = _session?['title'] as String? ?? '';
+        _descController.text = _session?['description'] as String? ?? '';
+        _isLoading = false;
+      });
     } catch (e) {
       if (!mounted) return;
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to load analytics: $e'),
+          content: Text(AppError.from(e, context: 'analytics')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -128,7 +177,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to export CSV: $e'),
+          content: Text(AppError.from(e, context: 'export')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -136,10 +185,13 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   }
 
   Future<void> _exportPDF() async {
-    if (_analyticsData == null) return;
-
-    final metrics = _analyticsData!['metrics'] as Map<String, dynamic>;
-    final polls = _analyticsData!['pollStats'] as List? ?? [];
+    final metrics = (_analyticsData?['metrics'] as Map<String, dynamic>?) ?? {
+      'totalParticipants': 0,
+      'totalVotes': 0,
+      'totalQuestions': 0,
+      'averageEngagement': 0.0,
+    };
+    final polls = _analyticsData?['pollStats'] as List? ?? [];
 
     final pdf = pw.Document();
 
@@ -234,7 +286,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to compile PDF: $e'),
+          content: Text(AppError.from(e, context: 'export')),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -548,9 +600,14 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
   }
 
   Widget _buildOverviewTab(bool isDark, String formattedCode) {
-    final metrics = _analyticsData!['metrics'] as Map<String, dynamic>;
-    final timeline = _analyticsData!['activityTimeline'] as List? ?? [];
-    final recentResponses = _analyticsData!['recentResponses'] as List? ?? [];
+    final metrics = (_analyticsData?['metrics'] as Map<String, dynamic>?) ?? {
+      'totalParticipants': 0,
+      'totalVotes': 0,
+      'totalQuestions': 0,
+      'averageEngagement': 0.0,
+    };
+    final timeline = _analyticsData?['activityTimeline'] as List? ?? [];
+    final recentResponses = _analyticsData?['recentResponses'] as List? ?? [];
     final code = _session?['access_code'] as String? ?? '000000';
 
     return SingleChildScrollView(
@@ -595,7 +652,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   },
                   icon: const Icon(Icons.settings_rounded, size: 20),
                   label: const Text(
-                    'Session Settings',
+                    'Settings',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
@@ -1077,114 +1134,117 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       engColor = AppColors.warning;
     }
 
-    return Builder(
-      builder: (context) {
-        final double screenWidth = MediaQuery.of(context).size.width;
-        final double availableWidth = screenWidth > 800 ? (screenWidth - 320) : (screenWidth - 32);
-        final double cardWidth = (availableWidth - 16) / 2;
-        return Wrap(
-          spacing: 16,
-          runSpacing: 16,
+    final card1 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.people_outline_rounded,
+      iconBgColor: AppColors.primary.withValues(alpha: 0.08),
+      iconColor: AppColors.primary,
+      value: '$participantsCount',
+      label: 'Total Users',
+      footerWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              color: AppColors.success,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Text(
+            'Live tracking',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.success,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final card2 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.insights_rounded,
+      iconBgColor: engColor.withValues(alpha: 0.08),
+      iconColor: engColor,
+      value: '${(averageEngagement * 10).clamp(0, 100).toInt()}%',
+      label: 'Engagement Rate',
+      footerWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: engColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$engLabel activity',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: engColor,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final card3 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.how_to_vote_rounded,
+      iconBgColor: AppColors.secondary.withValues(alpha: 0.08),
+      iconColor: AppColors.secondary,
+      value: '$totalVotes',
+      label: 'Votes Cast',
+      footerWidget: Text(
+        'Across all polls',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+      ),
+    );
+
+    final card4 = _buildStatCard(
+      isDark: isDark,
+      icon: Icons.timer_outlined,
+      iconBgColor: AppColors.purpleAccent.withValues(alpha: 0.08),
+      iconColor: AppColors.purpleAccent,
+      value: _getMockAvgTime(participantsCount, totalVotes),
+      label: 'Avg Response Time',
+      footerWidget: Text(
+        'Per response',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+      ),
+    );
+
+    return Column(
+      children: [
+        Row(
           children: [
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.people_outline_rounded,
-              iconBgColor: AppColors.primary.withValues(alpha: 0.08),
-              iconColor: AppColors.primary,
-              value: '$participantsCount',
-              label: 'Total Users',
-              footerWidget: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: AppColors.success,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    'Live tracking',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.success,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.insights_rounded,
-              iconBgColor: engColor.withValues(alpha: 0.08),
-              iconColor: engColor,
-              value: '${(averageEngagement * 10).clamp(0, 100).toInt()}%',
-              label: 'Engagement Rate',
-              footerWidget: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: engColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$engLabel activity',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: engColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.how_to_vote_rounded,
-              iconBgColor: AppColors.secondary.withValues(alpha: 0.08),
-              iconColor: AppColors.secondary,
-              value: '$totalVotes',
-              label: 'Votes Cast',
-              footerWidget: Text(
-                'Across all polls',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                ),
-              ),
-            ),
-            _buildStatCard(
-              isDark: isDark,
-              width: cardWidth,
-              icon: Icons.timer_outlined,
-              iconBgColor: AppColors.purpleAccent.withValues(alpha: 0.08),
-              iconColor: AppColors.purpleAccent,
-              value: _getMockAvgTime(participantsCount, totalVotes),
-              label: 'Avg Response Time',
-              footerWidget: Text(
-                'Per response',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white38 : Colors.grey.shade500,
-                ),
-              ),
-            ),
+            Expanded(child: card1),
+            const SizedBox(width: 12),
+            Expanded(child: card2),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: card3),
+            const SizedBox(width: 12),
+            Expanded(child: card4),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1198,7 +1258,6 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   Widget _buildStatCard({
     required bool isDark,
-    required double width,
     required IconData icon,
     required Color iconBgColor,
     required Color iconColor,
@@ -1207,8 +1266,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
     required Widget footerWidget,
   }) {
     return Container(
-      width: width,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1237,9 +1295,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   color: iconBgColor,
                   borderRadius: BorderRadius.circular(8),
@@ -1248,17 +1306,21 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : AppColors.textPrimaryLight,
-              letterSpacing: -0.5,
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                letterSpacing: -0.5,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           footerWidget,
         ],
       ),
@@ -2683,7 +2745,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to update status: $e'),
+          content: Text(AppError.from(e)),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -2725,7 +2787,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       setState(() => _isSavingSettings = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to update settings: $e'),
+          content: Text(AppError.from(e)),
           backgroundColor: Colors.redAccent,
         ),
       );

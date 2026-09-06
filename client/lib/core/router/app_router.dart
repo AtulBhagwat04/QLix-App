@@ -7,7 +7,6 @@ import '../storage/secure_storage.dart';
 import '../../../features/auth/presentation/screens/login_screen.dart';
 import '../../../features/auth/presentation/screens/signup_screen.dart';
 import '../../../features/auth/presentation/screens/splash_screen.dart';
-import '../../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../../features/sessions/presentation/screens/dashboard_screen.dart';
 import '../../../features/sessions/presentation/screens/create_session_screen.dart';
 import '../../../features/sessions/presentation/screens/live_control_screen.dart';
@@ -23,12 +22,6 @@ final GoRouter appRouter = GoRouter(
     final secureStorage = sl<SecureStorageService>();
     final path = state.uri.path;
 
-    // Check if user has seen onboarding. If not, redirect to onboarding.
-    final hasSeenOnboarding = await secureStorage.getHasSeenOnboarding();
-    if (!hasSeenOnboarding && path != '/onboarding' && path != '/splash') {
-      return '/onboarding';
-    }
-
     final token = await secureStorage.getAccessToken();
     final isLoggedIn = token != null;
 
@@ -37,6 +30,7 @@ final GoRouter appRouter = GoRouter(
       '/dashboard',
       '/session/create',
       '/session/control',
+      '/live',
       '/analytics',
     ];
 
@@ -46,8 +40,7 @@ final GoRouter appRouter = GoRouter(
       return '/login';
     }
 
-    if (isLoggedIn &&
-        (path == '/login' || path == '/signup' || path == '/onboarding')) {
+    if (isLoggedIn && (path == '/login' || path == '/signup')) {
       return '/dashboard';
     }
 
@@ -57,10 +50,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/splash',
       builder: (context, state) => const HostSplashWidget(),
-    ),
-    GoRoute(
-      path: '/onboarding',
-      builder: (context, state) => const OnboardingScreen(),
     ),
     GoRoute(
       path: '/',
@@ -84,6 +73,13 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/session/control/:id',
+      builder: (context, state) {
+        final sessionId = state.pathParameters['id']!;
+        return HostLiveControlScreen(sessionId: sessionId);
+      },
+    ),
+    GoRoute(
+      path: '/live/:id',
       builder: (context, state) {
         final sessionId = state.pathParameters['id']!;
         return HostLiveControlScreen(sessionId: sessionId);

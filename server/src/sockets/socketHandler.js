@@ -13,11 +13,15 @@ function mapQuestionToCamelCase(row) {
     status: row.status,
     upvotesCount: row.upvotes_count,
     isPinned: row.is_pinned,
+    answerText: row.answer_text || null,
     authorName: row.authorName || (row.is_anonymous ? 'Anonymous' : 'Guest'),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
 }
+
+// Map tracking active running quiz countdown intervals by sessionId to prevent overlapping timers on restarts
+const activeQuizTimers = new Map();
 
 export default function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
@@ -335,7 +339,7 @@ export default function registerSocketHandlers(io) {
     });
 
     // 7. Change Question Status (Moderation, answering, pinning)
-    socket.on('update_question_status', async ({ sessionId, questionId, status, isPinned }) => {
+    socket.on('update_question_status', async ({ sessionId, questionId, status, isPinned, answerText }) => {
       try {
         const roomName = `session:${sessionId}`;
         
@@ -353,6 +357,14 @@ export default function registerSocketHandlers(io) {
           params.push(isPinned);
           index++;
         }
+        // Store host's written answer text (if provided)
+        if (answerText !== undefined && answerText !== null) {
+          queryParts.push(`answer_text = $${index}`);
+          params.push(answerText.trim() || null);
+          index++;
+        }
+
+        if (queryParts.length === 0) return;
 
         params.push(questionId);
         const updateQuery = `
@@ -384,12 +396,23 @@ export default function registerSocketHandlers(io) {
     socket.on('start_quiz_timer', async ({ sessionId, pollId, durationSeconds }) => {
       try {
         const roomName = `session:${sessionId}`;
-        let remaining = durationSeconds || 15;
+        let remaining = parseInt(durationSeconds, 10) || 15;
 
-        // Save active state in Redis
+        // Clear any previous running timer for this session to prevent conflicting countdowns on restart
+        if (activeQuizTimers.has(sessionId)) {
+          clearInterval(activeQuizTimers.get(sessionId));
+          activeQuizTimers.delete(sessionId);
+        }
+
+        // Set poll status to active so responses are accepted (preserves existing votes without clearing)
+        await db.query("UPDATE polls SET status = 'active' WHERE id = $1", [pollId]);
+        await db.query("UPDATE sessions SET active_quiz_question_id = $1 WHERE id = $2", [pollId, sessionId]);
+
+        // Save active state in Redis with the new timestamp and duration
+        const now = Date.now();
         await redis.hset(`quiz:active:${sessionId}`, {
           pollId,
-          activatedAt: Date.now(),
+          activatedAt: now,
           timeLimit: remaining,
         });
 
@@ -399,19 +422,45 @@ export default function registerSocketHandlers(io) {
           remaining--;
           if (remaining <= 0) {
             clearInterval(intervalId);
+            if (activeQuizTimers.get(sessionId) === intervalId) {
+              activeQuizTimers.delete(sessionId);
+            }
             io.to(roomName).emit('quiz_timer_end', { pollId });
-            // Unlock and reveal correct answer in poll results
-            await db.query('UPDATE polls SET status = \'locked\' WHERE id = $1', [pollId]);
-            const pollRes = await db.query('SELECT * FROM polls WHERE id = $1', [pollId]);
-            const results = await calculatePollResults(pollRes.rows[0]);
-            io.to(roomName).emit('votes_updated', { pollId, results });
+            // Lock poll and reveal results
+            await db.query("UPDATE polls SET status = 'locked' WHERE id = $1", [pollId]);
+            const pollRes = await db.query("SELECT * FROM polls WHERE id = $1", [pollId]);
+            if (pollRes.rows.length > 0) {
+              const results = await calculatePollResults(pollRes.rows[0]);
+              io.to(roomName).emit('votes_updated', { pollId, results });
+            }
           } else {
             io.to(roomName).emit('quiz_timer_tick', { pollId, remaining });
           }
         }, 1000);
 
+        activeQuizTimers.set(sessionId, intervalId);
+
       } catch (err) {
         console.error('Socket start_quiz_timer error:', err);
+      }
+    });
+
+    socket.on('stop_quiz_timer', async ({ sessionId, pollId }) => {
+      try {
+        const roomName = `session:${sessionId}`;
+        if (activeQuizTimers.has(sessionId)) {
+          clearInterval(activeQuizTimers.get(sessionId));
+          activeQuizTimers.delete(sessionId);
+        }
+        io.to(roomName).emit('quiz_timer_end', { pollId });
+        await db.query("UPDATE polls SET status = 'locked' WHERE id = $1", [pollId]);
+        const pollRes = await db.query("SELECT * FROM polls WHERE id = $1", [pollId]);
+        if (pollRes.rows.length > 0) {
+          const results = await calculatePollResults(pollRes.rows[0]);
+          io.to(roomName).emit('votes_updated', { pollId, results });
+        }
+      } catch (err) {
+        console.error('Socket stop_quiz_timer error:', err);
       }
     });
 
@@ -428,6 +477,28 @@ export default function registerSocketHandlers(io) {
         io.to(roomName).emit('announcement_received', { announcement: result.rows[0] });
       } catch (err) {
         console.error('Socket send_announcement error:', err);
+      }
+    });
+
+    // 10. Host update session state (draft / active / ended)
+    socket.on('update_session_state', async ({ sessionId, state }) => {
+      try {
+        const sessionRes = await db.query(
+          'UPDATE sessions SET state = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 OR access_code = $2 RETURNING *',
+          [state, sessionId]
+        );
+        if (sessionRes.rows.length === 0) return;
+        const updatedSession = sessionRes.rows[0];
+        const targetSessionId = updatedSession.id;
+        const roomName = `session:${targetSessionId}`;
+
+        io.to(roomName).emit('session_state_changed', {
+          sessionId: targetSessionId,
+          state: updatedSession.state,
+          session: updatedSession,
+        });
+      } catch (err) {
+        console.error('Socket update_session_state error:', err);
       }
     });
 

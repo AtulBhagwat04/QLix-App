@@ -1,5 +1,6 @@
 import db from '../config/db.js';
 import { AppError } from '../middlewares/errorHandler.js';
+import { parseCount } from '../utils/helpers.js';
 
 export const getSessionAnalytics = async (req, res, next) => {
   const { sessionId } = req.params;
@@ -10,7 +11,7 @@ export const getSessionAnalytics = async (req, res, next) => {
       'SELECT COUNT(*) as count FROM participants WHERE session_id = $1',
       [sessionId]
     );
-    const totalParticipants = parseInt(partCountRes.rows[0]?.count ?? partCountRes.rows[0]?.['COUNT(*)'] ?? 0, 10) || 0;
+    const totalParticipants = parseCount(partCountRes.rows[0]);
 
     // 2. Total Votes Count
     const voteCountRes = await db.query(
@@ -20,14 +21,14 @@ export const getSessionAnalytics = async (req, res, next) => {
        WHERE p.session_id = $1`,
       [sessionId]
     );
-    const totalVotes = parseInt(voteCountRes.rows[0]?.count ?? voteCountRes.rows[0]?.['COUNT(v.id)'] ?? 0, 10) || 0;
+    const totalVotes = parseCount(voteCountRes.rows[0]);
 
     // 3. Total Q&A Questions Count
     const qaCountRes = await db.query(
       'SELECT COUNT(*) as count FROM questions WHERE session_id = $1',
       [sessionId]
     );
-    const totalQuestions = parseInt(qaCountRes.rows[0]?.count ?? qaCountRes.rows[0]?.['COUNT(*)'] ?? 0, 10) || 0;
+    const totalQuestions = parseCount(qaCountRes.rows[0]);
 
     // 4. Poll by Poll Stats
     const pollsStatsRes = await db.query(
@@ -204,7 +205,7 @@ export const getOverviewAnalytics = async (req, res, next) => {
       'SELECT COUNT(*) FROM sessions WHERE host_id = $1',
       [hostId]
     );
-    const totalSessions = parseInt(sessionsRes.rows[0].count, 10);
+    const totalSessions = parseCount(sessionsRes.rows[0]);
 
     // 2. Total Participants joined across all host's sessions
     const participantsRes = await db.query(
@@ -214,7 +215,7 @@ export const getOverviewAnalytics = async (req, res, next) => {
        WHERE s.host_id = $1`,
       [hostId]
     );
-    const totalParticipants = parseInt(participantsRes.rows[0].count, 10);
+    const totalParticipants = parseCount(participantsRes.rows[0]);
 
     // 3. Total Votes (responses) cast across all host's sessions
     const votesRes = await db.query(
@@ -225,7 +226,7 @@ export const getOverviewAnalytics = async (req, res, next) => {
        WHERE s.host_id = $1`,
       [hostId]
     );
-    const totalResponses = parseInt(votesRes.rows[0].count, 10);
+    const totalResponses = parseCount(votesRes.rows[0]);
 
     // 4. Total Quizzes created by host
     // (a poll is a quiz question if at least one option has is_correct = true)
@@ -237,7 +238,7 @@ export const getOverviewAnalytics = async (req, res, next) => {
        WHERE s.host_id = $1 AND po.is_correct = true`,
       [hostId]
     );
-    const totalQuizzes = parseInt(quizzesRes.rows[0].count, 10);
+    const totalQuizzes = parseCount(quizzesRes.rows[0]);
 
     res.status(200).json({
       status: 'success',

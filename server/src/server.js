@@ -18,19 +18,25 @@ const io = new Server(server, {
   },
 });
 
-// Configure horizontal scaling adapter via Redis Pub/Sub
-try {
-  const pubClient = createRedisClient();
-  const subClient = createRedisClient();
+app.set('io', io);
 
-  Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
-    io.adapter(createAdapter(pubClient, subClient));
-    console.log('Horizontal scaling Socket.io Redis adapter connected');
-  }).catch((err) => {
-    console.warn('Redis adapter connections failed, falling back to local memory sockets:', err.message);
-  });
-} catch (e) {
-  console.warn('Failed to construct Redis clients for Socket.io adapter:', e.message);
+// Configure horizontal scaling adapter via Redis Pub/Sub if REDIS_URL is provided
+if (process.env.REDIS_URL) {
+  try {
+    const pubClient = createRedisClient();
+    const subClient = createRedisClient();
+
+    Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+      io.adapter(createAdapter(pubClient, subClient));
+      console.log('Horizontal scaling Socket.io Redis adapter connected');
+    }).catch((err) => {
+      console.warn('Redis adapter connections failed, falling back to local memory sockets:', err.message);
+    });
+  } catch (e) {
+    console.warn('Failed to construct Redis clients for Socket.io adapter:', e.message);
+  }
+} else {
+  console.log('Socket.io running in single-instance mode with in-memory adapter (REDIS_URL not configured)');
 }
 
 // Bind Websocket events handlers
@@ -40,7 +46,7 @@ registerSocketHandlers(io);
 const startServer = async () => {
   try {
     const dbTest = await db.query('SELECT NOW()');
-    console.log(`PostgreSQL Pool connected successfully at ${dbTest.rows[0].now}`);
+    console.log(`Database connected successfully at ${dbTest.rows[0].now}`);
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`QLix Backend Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT} (Bound to 0.0.0.0 - Accessible on any IP)`);
