@@ -7,13 +7,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_images.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
 import '../../../../core/storage/cache_manager.dart';
 import '../../../../core/network/socket_client.dart';
-import '../../../../core/network/api_client.dart';
 import '../../../auth/presentation/blocs/auth_bloc.dart';
 import '../blocs/session_bloc.dart';
 
