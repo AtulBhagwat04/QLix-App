@@ -97,7 +97,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       }
 
       setState(() {
-        _session = session;
+        _session = session.toMap();
         _polls = polls;
         _questions = questions;
         _activePollId = session['active_poll_id'] as String?;
@@ -262,7 +262,7 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       _socketClient.updateSessionState(widget.sessionId, newState);
       if (!mounted) return;
       setState(() {
-        _session = updated;
+        _session = updated.toMap();
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -1,12 +1,15 @@
+import '../entities/session.dart';
+import '../entities/overview_stats.dart';
+
 abstract class SessionRepository {
-  Future<List<Map<String, dynamic>>> getSessions();
-  Future<Map<String, dynamic>> createSession(
+  Future<List<Session>> getSessions();
+  Future<Session> createSession(
     String title,
     String description,
     Map<String, dynamic> settings,
   );
-  Future<Map<String, dynamic>> getSessionDetails(String sessionId);
-  Future<Map<String, dynamic>> updateSession(
+  Future<Session> getSessionDetails(String sessionId);
+  Future<Session> updateSession(
     String sessionId,
     Map<String, dynamic> body,
   );
@@ -17,6 +20,6 @@ abstract class SessionRepository {
     String? name,
     bool isAnonymous,
   );
-  Future<Map<String, dynamic>> verifySessionCode(String accessCode);
-  Future<Map<String, dynamic>> getOverviewStats();
+  Future<Session> verifySessionCode(String accessCode);
+  Future<OverviewStats> getOverviewStats();
 }

@@ -1,5 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../domain/entities/session.dart';
+import '../../domain/entities/overview_stats.dart';
 import '../../domain/repositories/session_repository.dart';
 import '../../../../core/utils/error_handler.dart';
 
@@ -84,8 +86,8 @@ class SessionInitial extends SessionState {}
 class SessionLoading extends SessionState {}
 
 class SessionsLoaded extends SessionState {
-  final List<Map<String, dynamic>> sessions;
-  final Map<String, dynamic>? stats;
+  final List<Session> sessions;
+  final OverviewStats? stats;
   final bool isOffline;
   final String? errorMessage;
 
@@ -101,14 +103,14 @@ class SessionsLoaded extends SessionState {
 }
 
 class SessionCreateSuccess extends SessionState {
-  final Map<String, dynamic> session;
+  final Session session;
   const SessionCreateSuccess(this.session);
   @override
   List<Object?> get props => [session];
 }
 
 class SessionJoinSuccess extends SessionState {
-  final Map<String, dynamic> session;
+  final Session session;
   final Map<String, dynamic> participant;
 
   const SessionJoinSuccess(this.session, this.participant);
@@ -118,7 +120,7 @@ class SessionJoinSuccess extends SessionState {
 }
 
 class SessionVerifySuccess extends SessionState {
-  final Map<String, dynamic> session;
+  final Session session;
 
   const SessionVerifySuccess(this.session);
 
@@ -153,8 +155,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     emit(SessionLoading());
     bool isOffline = false;
     String? errorMessage;
-    List<Map<String, dynamic>> list = [];
-    Map<String, dynamic>? stats;
+    List<Session> list = [];
+    OverviewStats? stats;
 
     try {
       list = await sessionRepository.getSessions();
@@ -206,7 +208,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         event.name,
         event.isAnonymous,
       );
-      final session = Map<String, dynamic>.from(data['session'] as Map);
+      final session = data['session'] as Session;
       final participant = Map<String, dynamic>.from(data['participant'] as Map);
       emit(SessionJoinSuccess(session, participant));
     } catch (e) {

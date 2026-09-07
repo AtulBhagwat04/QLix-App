@@ -30,14 +30,6 @@ class CacheManager {
     return _settingsBox.get('device_id') as String?;
   }
 
-  String? getServerIpOverride() {
-    return _settingsBox.get('server_ip_override') as String?;
-  }
-
-  Future<void> saveServerIpOverride(String ip) async {
-    await _settingsBox.put('server_ip_override', ip);
-  }
-
   Future<void> saveLastParticipantName(String name) async {
     await _settingsBox.put('participant_name', name);
   }

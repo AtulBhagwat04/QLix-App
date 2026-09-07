@@ -74,9 +74,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       // 1. Load Session Details
       Map<String, dynamic>? session;
       try {
-        session = await sl<SessionRepository>().getSessionDetails(
+        session = (await sl<SessionRepository>().getSessionDetails(
           widget.sessionId,
-        );
+        )).toMap();
       } catch (_) {}
 
       // 2. Load Session Analytics from server
@@ -2733,7 +2733,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       );
       if (!mounted) return;
       setState(() {
-        _session = updated;
+        _session = updated.toMap();
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2773,7 +2773,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
       );
       if (!mounted) return;
       setState(() {
-        _session = updated;
+        _session = updated.toMap();
         _isSavingSettings = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
