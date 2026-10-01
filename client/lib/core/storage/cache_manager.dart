@@ -101,6 +101,42 @@ class CacheManager {
     return null;
   }
 
+  static const String _themeModeKey = 'app_theme_mode';
+  static const String _userProfileKey = 'user_profile_data';
+  static const String _notificationSettingsKey = 'user_notification_settings';
+
+  Future<void> saveThemeMode(String mode) async {
+    await _settingsBox.put(_themeModeKey, mode);
+  }
+
+  String getThemeMode() {
+    return (_settingsBox.get(_themeModeKey) as String?) ?? 'light';
+  }
+
+  Future<void> saveUserProfile(Map<String, dynamic> data) async {
+    await _settingsBox.put(_userProfileKey, Map<String, dynamic>.from(data));
+  }
+
+  Map<String, dynamic>? getUserProfile() {
+    final raw = _settingsBox.get(_userProfileKey);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
+  Future<void> saveNotificationSettings(Map<String, dynamic> settings) async {
+    await _settingsBox.put(_notificationSettingsKey, Map<String, dynamic>.from(settings));
+  }
+
+  Map<String, dynamic>? getNotificationSettings() {
+    final raw = _settingsBox.get(_notificationSettingsKey);
+    if (raw is Map) {
+      return Map<String, dynamic>.from(raw);
+    }
+    return null;
+  }
+
   Future<void> clearCache() async {
     await _settingsBox.clear();
     await _sessionBox.clear();

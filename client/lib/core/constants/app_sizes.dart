@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 
 /// Centralized responsive dimensions, percentage calculations, spacing, and radiuses.
@@ -42,6 +43,13 @@ class AppSizes {
   static bool isTablet(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= 600;
 
+  static bool isDesktop(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= 1200;
+
+  /// True when the app should use the enhanced web/desktop layout.
+  static bool isWebDesktop(BuildContext context) =>
+      kIsWeb && MediaQuery.sizeOf(context).width >= 900;
+
   // -------------------------------------------------------------
   // Adaptive Layout Constraints
   // -------------------------------------------------------------
@@ -49,6 +57,7 @@ class AppSizes {
   /// Max bounded width for cards and forms (prevents stretching on tablets/desktops)
   static double maxFormWidth(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
+    if (kIsWeb && w >= 1200) return 520.0;
     if (w >= 600) return 480.0;
     return w * 0.92;
   }
@@ -58,6 +67,7 @@ class AppSizes {
     final w = MediaQuery.sizeOf(context).width;
     if (w < 360) return 16.0;
     if (w < 600) return 24.0;
+    if (kIsWeb && w >= 1200) return 48.0;
     return 32.0;
   }
 
@@ -136,4 +146,10 @@ extension ResponsiveContext on BuildContext {
 
   /// True if device width >= 600dp
   bool get isTablet => AppSizes.isTablet(this);
+
+  /// True if device width >= 1200dp
+  bool get isDesktop => AppSizes.isDesktop(this);
+
+  /// True when using web-enhanced layout (web + wide enough viewport)
+  bool get isWebDesktop => AppSizes.isWebDesktop(this);
 }

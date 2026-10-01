@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/platform_utils.dart';
 import '../../../auth/presentation/blocs/auth_bloc.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
@@ -60,13 +61,24 @@ class DashboardProfileTab extends StatelessWidget {
     final textSub =
         isDark ? const Color(0xFF94A3B8) : AppColors.textSecondaryLight;
 
+    final webPadding = PlatformUtils.shouldUseWebLayout(context)
+        ? PlatformUtils.webContentPadding(context)
+        : 20.0;
+
     return RefreshIndicator(
       onRefresh: onRefresh,
       color: AppColors.primary,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-        child: Column(
+        padding: EdgeInsets.fromLTRB(webPadding, 16, webPadding, 36),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: PlatformUtils.shouldUseWebLayout(context)
+                  ? PlatformUtils.maxContentWidth
+                  : double.infinity,
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // ── Purple Profile Hero Card ────────────────────────────
@@ -261,19 +273,8 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Update your personal information',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/edit'),
                   isFirst: true,
-                  isLast: false,
-                  isDark: isDark,
-                ),
-                _buildProfileRow(
-                  icon: Icons.shield_outlined,
-                  title: 'Change Password',
-                  subtitle: 'Update your account password',
-                  textPrimary: textPrimary,
-                  textSub: textSub,
-                  onTap: () {},
-                  isFirst: false,
                   isLast: false,
                   isDark: isDark,
                 ),
@@ -283,7 +284,7 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Manage your notification preferences',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/notifications'),
                   isFirst: false,
                   isLast: false,
                   isDark: isDark,
@@ -294,7 +295,7 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Choose theme and app appearance',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/appearance'),
                   isFirst: false,
                   isLast: true,
                   isDark: isDark,
@@ -317,7 +318,7 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Get help and view FAQs',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/help-support'),
                   isFirst: true,
                   isLast: false,
                   isDark: isDark,
@@ -328,7 +329,7 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Read our terms and privacy policy',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/terms-privacy'),
                   isFirst: false,
                   isLast: false,
                   isDark: isDark,
@@ -339,7 +340,7 @@ class DashboardProfileTab extends StatelessWidget {
                   subtitle: 'Version 1.0.0',
                   textPrimary: textPrimary,
                   textSub: textSub,
-                  onTap: () {},
+                  onTap: () => context.push('/profile/about'),
                   isFirst: false,
                   isLast: true,
                   isDark: isDark,
@@ -412,6 +413,8 @@ class DashboardProfileTab extends StatelessWidget {
             .animate()
             .fade(duration: 400.ms)
             .slideY(begin: 0.04, end: 0, curve: Curves.easeOutCubic),
+          ),
+        ),
       ),
     );
   }

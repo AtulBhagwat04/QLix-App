@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/platform_utils.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 import 'dashboard_header.dart';
@@ -31,12 +32,23 @@ class HomeTabView extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final recentSessions = sessions.take(5).toList();
 
+    final webPadding = PlatformUtils.shouldUseWebLayout(context)
+        ? PlatformUtils.webContentPadding(context)
+        : 20.0;
+
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-        child: Column(
+        padding: EdgeInsets.fromLTRB(webPadding, 16, webPadding, 36),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: PlatformUtils.shouldUseWebLayout(context)
+                  ? PlatformUtils.maxContentWidth
+                  : double.infinity,
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardHeader(hostName: hostName),
@@ -137,6 +149,8 @@ class HomeTabView extends StatelessWidget {
             .animate()
             .fade(duration: 400.ms)
             .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+          ),
+        ),
       ),
     );
   }

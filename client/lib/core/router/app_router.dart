@@ -13,8 +13,16 @@ import '../../../features/sessions/presentation/screens/live_control_screen.dart
 import '../../../features/polls/presentation/screens/participant_workspace_screen.dart';
 import '../../../features/presenter/presentation/screens/presenter_mode_screen.dart';
 import '../../../features/analytics/presentation/screens/analytics_dashboard_screen.dart';
-
 import '../../../features/sessions/presentation/screens/join_screen.dart';
+
+// Profile Screens
+import '../../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../../features/profile/presentation/screens/change_password_screen.dart';
+import '../../../features/profile/presentation/screens/notification_settings_screen.dart';
+import '../../../features/profile/presentation/screens/appearance_settings_screen.dart';
+import '../../../features/profile/presentation/screens/help_support_screen.dart';
+import '../../../features/profile/presentation/screens/terms_privacy_screen.dart';
+import '../../../features/profile/presentation/screens/about_qlix_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -32,6 +40,7 @@ final GoRouter appRouter = GoRouter(
       '/session/control',
       '/live',
       '/analytics',
+      '/profile',
     ];
 
     final isHostRoute = hostOnlyRoutes.any((r) => path.startsWith(r));
@@ -105,6 +114,35 @@ final GoRouter appRouter = GoRouter(
         final sessionId = state.pathParameters['id']!;
         return AnalyticsDashboardScreen(sessionId: sessionId);
       },
+    ),
+    // Profile Sub-screens
+    GoRoute(
+      path: '/profile/edit',
+      builder: (context, state) => const EditProfileScreen(),
+    ),
+    GoRoute(
+      path: '/profile/change-password',
+      builder: (context, state) => const ChangePasswordScreen(),
+    ),
+    GoRoute(
+      path: '/profile/notifications',
+      builder: (context, state) => const NotificationSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/appearance',
+      builder: (context, state) => const AppearanceSettingsScreen(),
+    ),
+    GoRoute(
+      path: '/profile/help-support',
+      builder: (context, state) => const HelpSupportScreen(),
+    ),
+    GoRoute(
+      path: '/profile/terms-privacy',
+      builder: (context, state) => const TermsPrivacyScreen(),
+    ),
+    GoRoute(
+      path: '/profile/about',
+      builder: (context, state) => const AboutQlixScreen(),
     ),
   ],
 );

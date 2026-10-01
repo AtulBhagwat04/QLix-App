@@ -15,41 +15,79 @@ import '../../../features/qa/domain/repositories/qa_repository.dart';
 import '../../../features/qa/data/repositories/qa_repository_impl.dart';
 import '../../../features/quiz/domain/repositories/quiz_repository.dart';
 import '../../../features/quiz/data/repositories/quiz_repository_impl.dart';
+import '../../../features/profile/domain/repositories/profile_repository.dart';
+import '../../../features/profile/data/repositories/profile_repository_impl.dart';
 
-// BLoCs
+// BLoCs & Cubits
 import '../../../features/auth/presentation/blocs/auth_bloc.dart';
 import '../../../features/sessions/presentation/blocs/session_bloc.dart';
+import '../../../features/profile/presentation/blocs/profile_bloc.dart';
+import '../../../features/profile/presentation/cubits/theme_cubit.dart';
 
 final sl = GetIt.instance;
 
 Future<void> initDI() async {
   // 1. Storage Services
-  final secureStorage = SecureStorageService();
-  sl.registerSingleton<SecureStorageService>(secureStorage);
+  if (!sl.isRegistered<SecureStorageService>()) {
+    final secureStorage = SecureStorageService();
+    sl.registerSingleton<SecureStorageService>(secureStorage);
+  }
 
-  final cacheManager = CacheManager();
-  await cacheManager.init();
-  sl.registerSingleton<CacheManager>(cacheManager);
+  if (!sl.isRegistered<CacheManager>()) {
+    final cacheManager = CacheManager();
+    await cacheManager.init();
+    sl.registerSingleton<CacheManager>(cacheManager);
+  }
 
   // 2. Network Client Services
-  final apiClient = ApiClient(secureStorage);
-  sl.registerSingleton<ApiClient>(apiClient);
+  if (!sl.isRegistered<ApiClient>()) {
+    final apiClient = ApiClient(sl());
+    sl.registerSingleton<ApiClient>(apiClient);
+  }
 
-  final socketClient = SocketClient();
-  sl.registerSingleton<SocketClient>(socketClient);
+  if (!sl.isRegistered<SocketClient>()) {
+    final socketClient = SocketClient();
+    sl.registerSingleton<SocketClient>(socketClient);
+  }
 
   // 3. Repositories
-  sl.registerLazySingleton<AuthRepository>(
-    () => AuthRepositoryImpl(sl(), sl()),
-  );
-  sl.registerLazySingleton<SessionRepository>(
-    () => SessionRepositoryImpl(sl(), sl()),
-  );
-  sl.registerLazySingleton<PollRepository>(() => PollRepositoryImpl(sl()));
-  sl.registerLazySingleton<QaRepository>(() => QaRepositoryImpl(sl()));
-  sl.registerLazySingleton<QuizRepository>(() => QuizRepositoryImpl(sl()));
+  if (!sl.isRegistered<AuthRepository>()) {
+    sl.registerLazySingleton<AuthRepository>(
+      () => AuthRepositoryImpl(sl(), sl()),
+    );
+  }
+  if (!sl.isRegistered<SessionRepository>()) {
+    sl.registerLazySingleton<SessionRepository>(
+      () => SessionRepositoryImpl(sl(), sl()),
+    );
+  }
+  if (!sl.isRegistered<PollRepository>()) {
+    sl.registerLazySingleton<PollRepository>(() => PollRepositoryImpl(sl()));
+  }
+  if (!sl.isRegistered<QaRepository>()) {
+    sl.registerLazySingleton<QaRepository>(() => QaRepositoryImpl(sl()));
+  }
+  if (!sl.isRegistered<QuizRepository>()) {
+    sl.registerLazySingleton<QuizRepository>(() => QuizRepositoryImpl(sl()));
+  }
+  if (!sl.isRegistered<ProfileRepository>()) {
+    sl.registerLazySingleton<ProfileRepository>(
+      () => ProfileRepositoryImpl(sl(), sl()),
+    );
+  }
 
-  // 4. State Management (BLoCs)
-  sl.registerFactory<AuthBloc>(() => AuthBloc(sl()));
-  sl.registerFactory<SessionBloc>(() => SessionBloc(sl()));
+  // 4. State Management (BLoCs & Cubits)
+  if (!sl.isRegistered<AuthBloc>()) {
+    sl.registerFactory<AuthBloc>(() => AuthBloc(sl()));
+  }
+  if (!sl.isRegistered<SessionBloc>()) {
+    sl.registerFactory<SessionBloc>(() => SessionBloc(sl()));
+  }
+  if (!sl.isRegistered<ProfileBloc>()) {
+    sl.registerFactory<ProfileBloc>(() => ProfileBloc(sl()));
+  }
+  if (!sl.isRegistered<ThemeCubit>()) {
+    sl.registerLazySingleton<ThemeCubit>(() => ThemeCubit(sl()));
+  }
 }
+

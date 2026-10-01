@@ -33,28 +33,17 @@ class AppStrings {
   static const String anonymous = 'Anonymous';
   static const String guest = 'Guest';
 
-  // Onboarding
-  static const String onboardingSlide1Title = 'Create Live Polls';
-  static const String onboardingSlide1Desc =
-      'Ask questions, run polls and get instant feedback from your audience.';
-  static const String onboardingSlide2Title = 'Manage Q&A';
-  static const String onboardingSlide2Desc =
-      'Let your audience ask questions and upvote the ones that matter most.';
-  static const String onboardingSlide3Title = 'Run Interactive Quizzes';
-  static const String onboardingSlide3Desc =
-      'Gamify your sessions with live timers, instant scoring and leaderboards.';
-
   // Authentication
   static const String welcomeBack = 'Welcome Back!';
   static const String welcomeSubtitle = 'Login to join live sessions.';
   static const String createAccount = 'Create Account';
   static const String createAccountSubtitle =
       'Create an account to host and join live sessions.';
-  static const String emailHint = 'Email address';
+  static const String emailHint = 'Email';
   static const String passwordHint = 'Password';
   static const String fullNameHint = 'Full Name';
   static const String rememberMe = 'Remember me';
-  static const String forgotPassword = 'Forgot password?';
+  static const String forgotPassword = 'Forgot password';
   static const String forgotPasswordDev =
       'Password reset functionality is under development.';
   static const String dontHaveAccount = "Don't have an account? ";
@@ -97,7 +86,7 @@ class AppStrings {
   static const String joinTitle = 'Join Session';
   static const String joinSubTitle =
       'Enter a room code to ask questions and vote';
-  static const String accessCodeLabel = '6 Digit Access Code';
+  static const String accessCodeLabel = 'Code';
   static const String codeError = 'Enter 6 digit code';
   static const String enterSessionCodeHint = 'Enter 6 digit Code';
   static const String guestNameLabel = 'Your Name';
