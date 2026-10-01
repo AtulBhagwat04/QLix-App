@@ -10,6 +10,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/utils/error_handler.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../domain/repositories/poll_repository.dart';
 import '../../../quiz/domain/repositories/quiz_repository.dart';
@@ -1462,14 +1463,19 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
         _buildCategoryFilterHeader(isDark),
         Expanded(
           child: filteredList.isEmpty
-              ? Center(
-                  child: Text(
-                    'No active polls in this category.',
-                    style: TextStyle(
-                      color: isDark ? Colors.white54 : Colors.black54,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+              ? QlixEmptyState.compact(
+                  icon: Icons.filter_alt_off_rounded,
+                  accentColor: AppColors.primary,
+                  title: 'No Polls in this Category',
+                  subtitle:
+                      'Try switching to "All Polls" to see other active questions from the presenter.',
+                  actionLabel: 'View All Polls',
+                  actionIcon: Icons.refresh_rounded,
+                  onActionPressed: () {
+                    setState(() {
+                      _selectedCategoryFilter = 'ALL';
+                    });
+                  },
                 )
               : ListView(
                   padding: const EdgeInsets.all(AppSizes.space16),
@@ -1950,10 +1956,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       case 'word_cloud':
         final words = results['words'] as List? ?? [];
         if (words.isEmpty) {
-          return const Text(
-            'No responses yet.',
-            style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
+          return QlixEmptyState.compact(
+            icon: Icons.bubble_chart_outlined,
+            accentColor: AppColors.primary,
+            title: 'Waiting for Responses',
+            subtitle: 'Word submissions from participants will appear here in real time.',
           );
         }
         return Wrap(
@@ -1985,15 +1992,11 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
       case 'open_text':
         final responses = results['responses'] as List? ?? [];
         if (responses.isEmpty) {
-          return Text(
-            'No responses yet.',
-            style: TextStyle(
-              color: isDark
-                  ? AppColors.textSecondaryDark
-                  : AppColors.textSecondaryLight,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
+          return QlixEmptyState.compact(
+            icon: Icons.text_snippet_outlined,
+            accentColor: AppColors.primary,
+            title: 'Waiting for Responses',
+            subtitle: 'Participant answers will stream here in real time.',
           );
         }
         return Column(
@@ -2756,25 +2759,10 @@ class _ParticipantWorkspaceScreenState extends State<ParticipantWorkspaceScreen>
         const Divider(height: 1),
         Expanded(
           child: _questions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.forum_outlined,
-                        size: 48,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No questions asked yet',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+              ? QlixEmptyState.noQuestions(
+                  isHost: false,
+                  subtitle:
+                      'Have a question or thought for the presenter? Type below to join the discussion.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.all(AppSizes.space16),

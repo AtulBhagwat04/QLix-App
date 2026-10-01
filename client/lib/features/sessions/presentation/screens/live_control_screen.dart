@@ -7,6 +7,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/utils/error_handler.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../../quiz/domain/repositories/quiz_repository.dart';
@@ -2400,31 +2401,10 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
         ],
         Expanded(
           child: activePolls.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.ballot_outlined,
-                        size: 54,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No live polls created yet',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Tap the bottom-right + button to create a poll',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
+              ? QlixEmptyState.noPolls(
+                  onCreatePoll: _addNewPollDialog,
+                  subtitle:
+                      'Tap below to launch a multiple choice, word cloud, rating, or open text poll to collect live audience responses in real time.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
@@ -2784,26 +2764,11 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
         ),
         Expanded(
           child: filteredQuestions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.question_answer_outlined,
-                        size: 54,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No questions found',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
+              ? QlixEmptyState.noQuestions(
+                  isHost: true,
+                  subtitle: _qaFilter != 'all'
+                      ? 'No questions match the current "${_qaFilter.toUpperCase()}" filter. Switch back to "All" to view all incoming audience questions.'
+                      : 'Audience submissions using PIN code ${_session?['accessCode'] ?? ''} will stream here live for moderation.',
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
@@ -3018,31 +2983,8 @@ class _HostLiveControlScreenState extends State<HostLiveControlScreen>
       children: [
         Expanded(
           child: quizPolls.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.quiz_outlined,
-                        size: 54,
-                        color: isDark ? Colors.white24 : Colors.black12,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'No quiz questions created',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Tap the bottom-right + button to add quiz questions',
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
-                      ),
-                    ],
-                  ),
+              ? QlixEmptyState.noQuizzes(
+                  onCreateQuiz: _addNewQuizDialog,
                 )
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),

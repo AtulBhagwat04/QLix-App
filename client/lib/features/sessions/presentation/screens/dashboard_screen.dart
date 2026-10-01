@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
+import '../../../../core/utils/platform_utils.dart';
+import '../../../../core/widgets/web_side_nav.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 import '../blocs/session_bloc.dart';
@@ -78,64 +80,15 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardHeader(hostName: _hostName),
-            const SizedBox(height: 60),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.event_busy_rounded,
-                    size: 72,
-                    color: Colors.grey.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'No sessions created yet',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a session to engage your audience.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-                      gradient: const LinearGradient(
-                        colors: AppColors.primaryGradient,
-                      ),
-                    ),
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                      ),
-                      onPressed: () => context.push('/session/create'),
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text(
-                        'Create Session',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 24),
+            QlixEmptyState.noSessions(
+              onCreateSession: () => context.push('/session/create'),
+              onRefresh: () => context.read<SessionBloc>().add(LoadSessions()),
             ),
           ],
         ),
@@ -190,59 +143,139 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
     }
   }
 
+  // ── Navigation items shared between bottom nav and side nav ────
+  static const _navItems = [
+    WebSideNavItem(
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
+      label: 'Home',
+    ),
+    WebSideNavItem(
+      icon: Icons.layers_outlined,
+      activeIcon: Icons.layers_rounded,
+      label: 'Sessions',
+    ),
+    WebSideNavItem(
+      icon: Icons.analytics_outlined,
+      activeIcon: Icons.analytics_rounded,
+      label: 'Analytics',
+    ),
+    WebSideNavItem(
+      icon: Icons.person_outline_rounded,
+      activeIcon: Icons.person_rounded,
+      label: 'Profile',
+    ),
+  ];
+
+  /// The main content body (shared between mobile and web layouts).
+  Widget _buildContentBody(bool isDark) {
+    return BlocBuilder<SessionBloc, SessionState>(
+      builder: (context, state) {
+        List<Session> sessions = _lastSessions;
+        OverviewStats? stats = _lastStats;
+        bool isOffline = false;
+        String? errorMsg;
+
+        if (state is SessionLoading && _lastSessions.isEmpty) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        }
+
+        if (state is SessionsLoaded) {
+          _lastSessions = state.sessions;
+          if (state.stats != null) {
+            _lastStats = state.stats;
+          }
+          sessions = _lastSessions;
+          stats = _lastStats;
+          isOffline = state.isOffline;
+          errorMsg = state.errorMessage;
+        } else if (state is SessionFailure) {
+          isOffline = true;
+          errorMsg = state.message;
+        }
+
+        return Column(
+          children: [
+            if (isOffline)
+              DashboardOfflineBanner(
+                message: errorMsg,
+                onRetry: () =>
+                    context.read<SessionBloc>().add(LoadSessions()),
+              ),
+            Expanded(
+              child: (sessions.isEmpty && _currentTab == 0)
+                  ? _buildEmptyStateView(isDark)
+                  : _buildTabBody(stats: stats, sessions: sessions),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final useWebLayout = PlatformUtils.shouldUseWebLayout(context);
 
+    // ── Web / Desktop layout: Side Nav + Content ──────────────────
+    if (useWebLayout) {
+      return Scaffold(
+        backgroundColor: isDark
+            ? AppColors.backgroundDark
+            : const Color(0xFFF8FAFC),
+        body: SafeArea(
+          child: Row(
+            children: [
+              // Side Navigation
+              WebSideNav(
+                currentIndex: _currentTab,
+                onTabChanged: (index) {
+                  setState(() => _currentTab = index);
+                },
+                items: _navItems,
+              ),
+              // Main Content Area
+              Expanded(
+                child: _buildContentBody(isDark),
+              ),
+            ],
+          ),
+        ),
+        // FAB is still shown on the Sessions tab
+        floatingActionButton: _currentTab == 1
+            ? FloatingActionButton.extended(
+                backgroundColor: AppColors.primary,
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                onPressed: () => context.push('/session/create'),
+                icon: const Icon(
+                  Icons.add_rounded,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  'New Session',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            : null,
+      );
+    }
+
+    // ── Mobile layout: Bottom Navigation (unchanged) ─────────────
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
           : const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: BlocBuilder<SessionBloc, SessionState>(
-          builder: (context, state) {
-            List<Session> sessions = _lastSessions;
-            OverviewStats? stats = _lastStats;
-            bool isOffline = false;
-            String? errorMsg;
-
-            if (state is SessionLoading && _lastSessions.isEmpty) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              );
-            }
-
-            if (state is SessionsLoaded) {
-              _lastSessions = state.sessions;
-              if (state.stats != null) {
-                _lastStats = state.stats;
-              }
-              sessions = _lastSessions;
-              stats = _lastStats;
-              isOffline = state.isOffline;
-              errorMsg = state.errorMessage;
-            } else if (state is SessionFailure) {
-              isOffline = true;
-              errorMsg = state.message;
-            }
-
-            return Column(
-              children: [
-                if (isOffline)
-                  DashboardOfflineBanner(
-                    message: errorMsg,
-                    onRetry: () =>
-                        context.read<SessionBloc>().add(LoadSessions()),
-                  ),
-                Expanded(
-                  child: (sessions.isEmpty && _currentTab == 0)
-                      ? _buildEmptyStateView(isDark)
-                      : _buildTabBody(stats: stats, sessions: sessions),
-                ),
-              ],
-            );
-          },
-        ),
+        child: _buildContentBody(isDark),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -317,3 +350,4 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
     );
   }
 }
+

@@ -33,28 +33,17 @@ class AppStrings {
   static const String anonymous = 'Anonymous';
   static const String guest = 'Guest';
 
-  // Onboarding
-  static const String onboardingSlide1Title = 'Create Live Polls';
-  static const String onboardingSlide1Desc =
-      'Ask questions, run polls and get instant feedback from your audience.';
-  static const String onboardingSlide2Title = 'Manage Q&A';
-  static const String onboardingSlide2Desc =
-      'Let your audience ask questions and upvote the ones that matter most.';
-  static const String onboardingSlide3Title = 'Run Interactive Quizzes';
-  static const String onboardingSlide3Desc =
-      'Gamify your sessions with live timers, instant scoring and leaderboards.';
-
   // Authentication
   static const String welcomeBack = 'Welcome Back!';
   static const String welcomeSubtitle = 'Login to join live sessions.';
   static const String createAccount = 'Create Account';
   static const String createAccountSubtitle =
       'Create an account to host and join live sessions.';
-  static const String emailHint = 'Email address';
+  static const String emailHint = 'Email';
   static const String passwordHint = 'Password';
   static const String fullNameHint = 'Full Name';
   static const String rememberMe = 'Remember me';
-  static const String forgotPassword = 'Forgot password?';
+  static const String forgotPassword = 'Forgot password';
   static const String forgotPasswordDev =
       'Password reset functionality is under development.';
   static const String dontHaveAccount = "Don't have an account? ";
@@ -97,7 +86,7 @@ class AppStrings {
   static const String joinTitle = 'Join Session';
   static const String joinSubTitle =
       'Enter a room code to ask questions and vote';
-  static const String accessCodeLabel = '6 Digit Access Code';
+  static const String accessCodeLabel = 'Code';
   static const String codeError = 'Enter 6 digit code';
   static const String enterSessionCodeHint = 'Enter 6 digit Code';
   static const String guestNameLabel = 'Your Name';
@@ -156,4 +145,41 @@ class AppStrings {
   static const String exportPdf = 'Export PDF';
   static const String pollStatistics = 'Poll Statistics';
   static const String activityTimeline = 'Activity Timeline';
+
+  // Error Messages
+  static const String errorDefault = 'Something went wrong. Please try again.';
+  static const String errorNetwork =
+      'Please check your connection and try again.';
+  static const String errorTimeout =
+      'The request timed out. Please check your connection and try again.';
+  static const String errorInvalidCredentials =
+      'Incorrect email or password.';
+  static const String errorEmailAlreadyInUse =
+      'An account with this email already exists. Please log in instead.';
+  static const String errorUnauthorized =
+      'Your session has expired. Please sign in again.';
+  static const String errorForbidden =
+      'You do not have permission to perform this action.';
+  static const String errorNotFound = 'The requested item could not be found.';
+  static const String errorSessionNotFound =
+      'Session not found.';
+  static const String errorSessionEnded =
+      'This session has already ended.';
+  static const String errorSessionNotActive =
+      'This session isn\'t active yet. Please wait for the host to start it.';
+  static const String errorInvalidCode =
+      'Invalid session code.';
+  static const String errorServerError =
+      'Something went wrong on the server.';
+  static const String errorTooManyRequests =
+      'Too many requests. Please wait a moment.';
+  static const String errorVotingLocked = 'Voting is closed for this poll.';
+  static const String errorAlreadyVoted =
+      'You have already submitted a response to this poll.';
+  static const String errorProfanity =
+      'Your message contains inappropriate content.';
+  static const String errorValidationRequired =
+      'Please fill in all required fields.';
+  static const String errorInputTooLong =
+      'Your input is too long.';
 }

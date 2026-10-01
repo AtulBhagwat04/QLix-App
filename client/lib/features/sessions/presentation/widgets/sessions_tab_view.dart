@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/platform_utils.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../domain/entities/session.dart';
 import 'session_card_tile.dart';
 import 'session_menu_sheet.dart';
@@ -153,12 +155,23 @@ class _SessionsTabViewState extends State<SessionsTabView> {
     final draftSessions = targetSessions.where((s) => s.isDraft).toList();
     final completedSessions = targetSessions.where((s) => s.isEnded).toList();
 
+    final webPadding = PlatformUtils.shouldUseWebLayout(context)
+        ? PlatformUtils.webContentPadding(context)
+        : 20.0;
+
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-        child: Column(
+        padding: EdgeInsets.fromLTRB(webPadding, 16, webPadding, 36),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: PlatformUtils.shouldUseWebLayout(context)
+                  ? PlatformUtils.maxContentWidth
+                  : double.infinity,
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
@@ -313,30 +326,21 @@ class _SessionsTabViewState extends State<SessionsTabView> {
             ],
             const SizedBox(height: 16),
             if (targetSessions.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.event_busy_rounded,
-                        size: 48,
-                        color: Colors.grey.withValues(alpha: 0.4),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: _searchQuery.isNotEmpty
+                    ? QlixEmptyState.noSearchResults(
+                        query: _searchQuery,
+                        onClearSearch: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                    : QlixEmptyState.noSessions(
+                        onCreateSession: () => context.push('/session/create'),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _searchQuery.isNotEmpty
-                            ? 'No matches found'
-                            : 'No sessions yet',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          color: Colors.grey,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               )
             else ...[
               if (liveSessions.isNotEmpty) ...[
@@ -375,6 +379,8 @@ class _SessionsTabViewState extends State<SessionsTabView> {
             .animate()
             .fade(duration: 400.ms)
             .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+          ),
+        ),
       ),
     );
   }

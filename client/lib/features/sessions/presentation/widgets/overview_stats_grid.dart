@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/platform_utils.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 
@@ -55,6 +56,10 @@ class OverviewStatsGrid extends StatelessWidget {
       }
     }
 
+    final crossAxisCount = PlatformUtils.isDesktopWidth(context)
+        ? 4
+        : (PlatformUtils.isTabletWidth(context) ? 3 : 2);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -87,7 +92,7 @@ class OverviewStatsGrid extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         GridView.count(
-          crossAxisCount: 2,
+          crossAxisCount: crossAxisCount,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 12,

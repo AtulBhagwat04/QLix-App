@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/platform_utils.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 
@@ -92,12 +94,23 @@ class DashboardAnalyticsTab extends StatelessWidget {
       });
     final topSessions = sortedSessions.take(5).toList();
 
+    final webPadding = PlatformUtils.shouldUseWebLayout(context)
+        ? PlatformUtils.webContentPadding(context)
+        : 20.0;
+
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
-        child: Column(
+        padding: EdgeInsets.fromLTRB(webPadding, 16, webPadding, 36),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: PlatformUtils.shouldUseWebLayout(context)
+                  ? PlatformUtils.maxContentWidth
+                  : double.infinity,
+            ),
+            child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -200,6 +213,8 @@ class DashboardAnalyticsTab extends StatelessWidget {
             .animate()
             .fade(duration: 400.ms)
             .slideY(begin: 0.05, end: 0, curve: Curves.easeOutCubic),
+          ),
+        ),
       ),
     );
   }
@@ -675,7 +690,7 @@ class DashboardAnalyticsTab extends StatelessWidget {
         const SizedBox(height: 10),
         if (topSessions.isEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             decoration: BoxDecoration(
               color: isDark
                   ? AppColors.surfaceDark.withValues(alpha: 0.4)
@@ -687,25 +702,12 @@ class DashboardAnalyticsTab extends StatelessWidget {
                     : const Color(0xFFE2E8F0),
               ),
             ),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.leaderboard_outlined,
-                    size: 36,
-                    color: Colors.grey.withValues(alpha: 0.4),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No session activity yet',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white54 : Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
+            child: QlixEmptyState.compact(
+              icon: Icons.leaderboard_outlined,
+              accentColor: const Color(0xFF3B82F6),
+              title: 'No Session Activity Yet',
+              subtitle:
+                  'Host interactive sessions to view rankings and participant engagement trends.',
             ),
           )
         else

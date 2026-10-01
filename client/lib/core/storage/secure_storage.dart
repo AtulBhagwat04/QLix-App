@@ -5,7 +5,6 @@ class SecureStorageService {
 
   static const String _accessTokenKey = 'access_token';
   static const String _refreshTokenKey = 'refresh_token';
-  static const String _hasSeenOnboardingKey = 'has_seen_onboarding';
 
   Future<void> saveAccessToken(String token) async {
     await _storage.write(key: _accessTokenKey, value: token);
@@ -31,14 +30,6 @@ class SecureStorageService {
     await _storage.delete(key: _refreshTokenKey);
   }
 
-  Future<void> saveHasSeenOnboarding(bool hasSeen) async {
-    await _storage.write(key: _hasSeenOnboardingKey, value: hasSeen.toString());
-  }
-
-  Future<bool> getHasSeenOnboarding() async {
-    final value = await _storage.read(key: _hasSeenOnboardingKey);
-    return value == 'true';
-  }
 
   Future<void> clearAll() async {
     await _storage.deleteAll();
