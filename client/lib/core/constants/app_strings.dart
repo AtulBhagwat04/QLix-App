@@ -145,4 +145,41 @@ class AppStrings {
   static const String exportPdf = 'Export PDF';
   static const String pollStatistics = 'Poll Statistics';
   static const String activityTimeline = 'Activity Timeline';
+
+  // Error Messages
+  static const String errorDefault = 'Something went wrong. Please try again.';
+  static const String errorNetwork =
+      'Please check your connection and try again.';
+  static const String errorTimeout =
+      'The request timed out. Please check your connection and try again.';
+  static const String errorInvalidCredentials =
+      'Incorrect email or password.';
+  static const String errorEmailAlreadyInUse =
+      'An account with this email already exists. Please log in instead.';
+  static const String errorUnauthorized =
+      'Your session has expired. Please sign in again.';
+  static const String errorForbidden =
+      'You do not have permission to perform this action.';
+  static const String errorNotFound = 'The requested item could not be found.';
+  static const String errorSessionNotFound =
+      'Session not found.';
+  static const String errorSessionEnded =
+      'This session has already ended.';
+  static const String errorSessionNotActive =
+      'This session isn\'t active yet. Please wait for the host to start it.';
+  static const String errorInvalidCode =
+      'Invalid session code.';
+  static const String errorServerError =
+      'Something went wrong on the server.';
+  static const String errorTooManyRequests =
+      'Too many requests. Please wait a moment.';
+  static const String errorVotingLocked = 'Voting is closed for this poll.';
+  static const String errorAlreadyVoted =
+      'You have already submitted a response to this poll.';
+  static const String errorProfanity =
+      'Your message contains inappropriate content.';
+  static const String errorValidationRequired =
+      'Please fill in all required fields.';
+  static const String errorInputTooLong =
+      'Your input is too long.';
 }

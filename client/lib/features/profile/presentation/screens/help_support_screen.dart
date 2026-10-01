@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../widgets/faq_accordion_item.dart';
 import '../widgets/feedback_bottom_sheet.dart';
 import '../widgets/profile_app_bar.dart';
@@ -187,35 +188,21 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
             // FAQ List
             if (filteredFaqs.isEmpty)
               Container(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: cardBg,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: cardBorder),
                 ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.search_off_rounded,
-                      size: 48,
-                      color: isDark ? Colors.white24 : Colors.grey.shade400,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No matching answers found',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Try searching with different keywords or send us feedback.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: textSub),
-                    ),
-                  ],
+                child: QlixEmptyState.noSearchResults(
+                  compact: true,
+                  query: _searchQuery,
+                  onClearSearch: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = '';
+                    });
+                  },
                 ),
               )
             else

@@ -6,6 +6,7 @@ import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
 import '../../../qa/domain/repositories/qa_repository.dart';
 import '../../../sessions/domain/repositories/session_repository.dart';
@@ -1036,13 +1037,13 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
       case 'word_cloud':
         final words = results['words'] as List? ?? [];
         if (words.isEmpty) {
-          return const Center(
-            child: Text(
-              'No words submitted yet',
-              style: TextStyle(
-                color: AppColors.textSecondaryDark,
-                fontSize: 15,
-              ),
+          return Center(
+            child: QlixEmptyState.compact(
+              icon: Icons.bubble_chart_rounded,
+              accentColor: AppColors.primaryLight,
+              title: 'Waiting for Submissions',
+              subtitle:
+                  'Audience submissions will generate an interactive live word cloud.',
             ),
           );
         }
@@ -1087,13 +1088,13 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
       case 'open_text':
         final responses = results['responses'] as List? ?? [];
         if (responses.isEmpty) {
-          return const Center(
-            child: Text(
-              'No responses submitted yet',
-              style: TextStyle(
-                color: AppColors.textSecondaryDark,
-                fontSize: 15,
-              ),
+          return Center(
+            child: QlixEmptyState.compact(
+              icon: Icons.notes_rounded,
+              accentColor: AppColors.primaryLight,
+              title: 'Waiting for Responses',
+              subtitle:
+                  'Submissions from participants will populate here in real time.',
             ),
           );
         }
@@ -1266,13 +1267,13 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
               // Remaining Players List
               Expanded(
                 child: remaining.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No other participants on the board yet',
-                          style: TextStyle(
-                            color: AppColors.textSecondaryDark,
-                            fontSize: 13,
-                          ),
+                    ? Center(
+                        child: QlixEmptyState.compact(
+                          icon: Icons.emoji_events_outlined,
+                          accentColor: AppColors.warning,
+                          title: 'No Other Participants on the Board',
+                          subtitle:
+                              'More player scores will list here as attendees complete rounds.',
                         ),
                       )
                     : ListView.builder(
@@ -1449,28 +1450,10 @@ class _PresenterModeScreenState extends State<PresenterModeScreen>
         const SizedBox(height: 16),
         Expanded(
           child: _questions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 44,
-                        color: AppColors.textSecondaryDark.withValues(
-                          alpha: 0.4,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'No questions yet.\nJoin with code ${widget.accessCode} to ask!',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textSecondaryDark,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
+              ? QlixEmptyState.noQuestions(
+                  isHost: true,
+                  subtitle:
+                      'Join at QLix with code ${widget.accessCode} to submit questions directly to the presenter.',
                 )
               : ListView.builder(
                   itemCount: _questions.length,

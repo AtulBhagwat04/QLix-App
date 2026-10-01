@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/storage/secure_storage.dart';
 import '../../../../core/utils/platform_utils.dart';
 import '../../../../core/widgets/web_side_nav.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 import '../blocs/session_bloc.dart';
@@ -80,64 +80,15 @@ class _HostDashboardScreenState extends State<HostDashboardScreen> {
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DashboardHeader(hostName: _hostName),
-            const SizedBox(height: 60),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.event_busy_rounded,
-                    size: 72,
-                    color: Colors.grey.withValues(alpha: 0.3),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'No sessions created yet',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a session to engage your audience.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppSizes.radiusPill),
-                      gradient: const LinearGradient(
-                        colors: AppColors.primaryGradient,
-                      ),
-                    ),
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
-                      ),
-                      onPressed: () => context.push('/session/create'),
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text(
-                        'Create Session',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 24),
+            QlixEmptyState.noSessions(
+              onCreateSession: () => context.push('/session/create'),
+              onRefresh: () => context.read<SessionBloc>().add(LoadSessions()),
             ),
           ],
         ),

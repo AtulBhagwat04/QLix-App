@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/platform_utils.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 import '../../domain/entities/session.dart';
 import '../../domain/entities/overview_stats.dart';
 import 'dashboard_header.dart';
@@ -86,27 +87,29 @@ class HomeTabView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             if (recentSessions.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 32),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.event_busy_rounded,
-                        size: 44,
-                        color: Colors.grey.withValues(alpha: 0.35),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'No sessions yet',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.grey,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppColors.surfaceDark.withValues(alpha: 0.3)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : const Color(0xFFE2E8F0),
+                    width: 1,
                   ),
+                ),
+                child: QlixEmptyState.compact(
+                  icon: Icons.rocket_launch_rounded,
+                  accentColor: AppColors.primary,
+                  title: 'No Recent Sessions',
+                  subtitle:
+                      'Create your first interactive session to start gathering live responses.',
+                  actionLabel: 'Create Session',
+                  actionIcon: Icons.add_rounded,
+                  onActionPressed: () => context.push('/session/create'),
                 ),
               )
             else

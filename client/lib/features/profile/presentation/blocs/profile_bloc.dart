@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../../domain/repositories/profile_repository.dart';
 import 'profile_event.dart';
 import 'profile_state.dart';
@@ -27,7 +28,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
         notificationSettings: notifications,
       ));
     } catch (e) {
-      emit(ProfileFailure(e.toString()));
+      emit(ProfileFailure(AppError.from(e, context: 'profile')));
     }
   }
 
@@ -48,7 +49,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       } catch (e) {
         emit(currentState.copyWith(
           isSaving: false,
-          errorMessage: 'Failed to update profile: ${e.toString()}',
+          errorMessage: AppError.from(e, context: 'profile_update'),
         ));
       }
     }
@@ -72,7 +73,7 @@ class ProfileBloc extends Bloc<ProfileEvent, ProfileState> {
       } catch (e) {
         emit(currentState.copyWith(
           isSaving: false,
-          errorMessage: e.toString().replaceAll('Exception: ', ''),
+          errorMessage: AppError.from(e, context: 'password'),
         ));
       }
     }

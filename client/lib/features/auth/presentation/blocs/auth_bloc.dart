@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/utils/error_handler.dart';
 import '../../domain/repositories/auth_repository.dart';
 
 // Events
@@ -89,7 +90,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authRepository.login(event.email, event.password);
       emit(Authenticated());
     } catch (e) {
-      emit(AuthFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(AuthFailure(AppError.from(e, context: 'login')));
     }
   }
 
@@ -102,7 +103,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       await authRepository.signup(event.email, event.password, event.fullName);
       emit(Authenticated());
     } catch (e) {
-      emit(AuthFailure(e.toString().replaceAll('Exception: ', '')));
+      emit(AuthFailure(AppError.from(e, context: 'signup')));
     }
   }
 

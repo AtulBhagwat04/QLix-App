@@ -15,6 +15,7 @@ import '../../../../core/network/socket_client.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/error_handler.dart';
+import '../../../../core/widgets/qlix_empty_state.dart';
 
 import '../../../sessions/domain/repositories/session_repository.dart';
 import '../../../polls/domain/repositories/poll_repository.dart';
@@ -1397,16 +1398,11 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
           SizedBox(
             height: 180,
             child: timeline.isEmpty
-                ? Center(
-                    child: Text(
-                      'No timeline activity registered yet',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? Colors.white60
-                            : AppColors.textSecondaryLight,
-                      ),
-                    ),
+                ? QlixEmptyState.noActivity(
+                    compact: true,
+                    title: 'No Activity Registered Yet',
+                    message:
+                        'Response velocity and active participant timelines will generate as audience members interact.',
                   )
                 : LineChart(
                     LineChartData(
@@ -1589,7 +1585,7 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         const SizedBox(height: 12),
         recent.isEmpty
             ? Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.surfaceDark : Colors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -1599,15 +1595,12 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
                         : Colors.black.withValues(alpha: 0.05),
                   ),
                 ),
-                child: const Center(
-                  child: Text(
-                    'No responses received yet',
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+                child: QlixEmptyState.compact(
+                  icon: Icons.mark_email_unread_outlined,
+                  accentColor: AppColors.primary,
+                  title: 'No Responses Received Yet',
+                  subtitle:
+                      'Live audience answers will appear here in chronological order.',
                 ),
               )
             : Column(
@@ -1769,26 +1762,10 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   Widget _buildQuestionsTab(bool isDark) {
     if (_questions.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.forum_outlined,
-              size: 48,
-              color: Colors.grey.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No questions in this feed yet',
-              style: TextStyle(
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
+      return QlixEmptyState.noQuestions(
+        isHost: true,
+        subtitle:
+            'Questions submitted during the session along with upvotes and moderation status will display here.',
       );
     }
 
@@ -1999,26 +1976,9 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
 
   Widget _buildResponsesTab(bool isDark) {
     if (_polls.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.insert_chart_outlined_rounded,
-              size: 48,
-              color: Colors.grey.withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No polls in this session',
-              style: TextStyle(
-                color: Colors.grey,
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
+      return QlixEmptyState.noPolls(
+        subtitle:
+            'Poll breakdown analytics and vote distributions will appear here once polls are launched in this session.',
       );
     }
 
@@ -2372,29 +2332,16 @@ class _AnalyticsDashboardScreenState extends State<AnalyticsDashboardScreen>
         ),
         Expanded(
           child: participantsList.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.group_off_rounded,
-                        size: 48,
-                        color: Colors.grey.withValues(alpha: 0.4),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        rawParticipants.isEmpty
-                            ? 'No attendees joined yet'
-                            : 'No matching attendees found',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+              ? (rawParticipants.isEmpty
+                  ? QlixEmptyState.noAttendees(
+                      accessCode: _session?['accessCode'] as String?,
+                    )
+                  : QlixEmptyState.noSearchResults(
+                      query: _participantSearchQuery,
+                      onClearSearch: () {
+                        _participantSearchController.clear();
+                      },
+                    ))
               : ListView.builder(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
